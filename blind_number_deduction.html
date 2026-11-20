@@ -1,0 +1,3092 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blind Number Deduction — Real-Time Multiplayer & Solo Deduction Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            felt: {
+              950: '#070d12',
+              900: '#0b141c',
+              850: '#101d28',
+              800: '#162634',
+            }
+          },
+          animation: {
+            'flip-in': 'flipIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            'pop': 'popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+          },
+          keyframes: {
+            flipIn: {
+              '0%': { opacity: '0', transform: 'rotateY(-80deg) scale(0.92)' },
+              '100%': { opacity: '1', transform: 'rotateY(0deg) scale(1)' },
+            },
+            popIn: {
+              '0%': { opacity: '0', transform: 'scale(0.88)' },
+              '100%': { opacity: '1', transform: 'scale(1)' },
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      background-color: #070d12;
+      background-image:
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.09) 0%, transparent 55%),
+        radial-gradient(circle at 85% 90%, rgba(245, 158, 11, 0.06) 0%, transparent 45%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+    ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.6); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.8); }
+
+    .game-card {
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .game-card:hover:not(:disabled) { transform: translateY(-3px); }
+    .game-card:active:not(:disabled) { transform: translateY(0px) scale(0.98); }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/80 bg-felt-950/90 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-950/60 border border-emerald-400/30 shrink-0">
+          <span class="font-mono font-extrabold text-lg text-white tracking-tighter">??</span>
+        </div>
+        <div class="min-w-0">
+          <h1 class="font-bold text-sm sm:text-lg tracking-tight text-white leading-tight flex items-center gap-2 truncate">
+            <span>Blind Number Deduction</span>
+            <span id="header-online-pill" class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span> Online Room
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400 hidden md:block">Pair up across devices, spend operator cards, deduce every secret number.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <!-- Active Room Code Pill (Online Mode) -->
+        <button id="header-room-badge" onclick="copyRoomInvite()" title="Click to copy room code" class="hidden items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-xs font-mono font-bold text-sky-300 transition">
+          <span class="text-slate-400 font-sans font-normal hidden sm:inline">Room</span>
+          <span id="header-room-code">-----</span>
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        </button>
+
+        <!-- Round Counter Pill -->
+        <div id="header-round-badge" class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs sm:text-sm">
+          <span class="text-slate-400 hidden sm:inline">Round</span>
+          <span id="header-round-text" class="font-mono font-bold text-amber-400">1 / 18</span>
+        </div>
+
+        <!-- Scratchpad Drawer Toggle -->
+        <button id="btn-toggle-scratchpad" onclick="toggleScratchpad()" class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs sm:text-sm font-semibold transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          <span class="hidden md:inline">Deduction Pad</span>
+          <span class="md:hidden">Pad</span>
+        </button>
+
+        <!-- Rules Modal Button -->
+        <button onclick="openModal('modal-rules')" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 text-xs sm:text-sm font-medium transition">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="hidden sm:inline">Rules</span>
+        </button>
+
+        <!-- Leave / New Match Button -->
+        <button id="btn-new-game-header" onclick="leaveCurrentMatch()" class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs sm:text-sm font-medium transition">
+          <span>Leave</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast Notification Banner -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- MAIN APPLICATION CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ==================== VIEW 1: LOBBY / MODE SETUP ==================== -->
+    <section id="view-setup" class="max-w-3xl mx-auto animate-pop">
+      <div class="rounded-3xl bg-felt-900/90 border border-slate-800 shadow-2xl overflow-hidden">
+        <!-- Hero Banner -->
+        <div class="p-6 sm:p-8 border-b border-slate-800/80 bg-gradient-to-br from-slate-900 via-felt-900 to-emerald-950/30">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-semibold">
+              <span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"></span> Cross-Device Multiplayer Ready
+            </span>
+            <span class="inline-flex items-center px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+              2–6 Players • Numbers 1–100
+            </span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">Choose How You Want to Play</h2>
+          <p class="text-slate-400 text-sm sm:text-base leading-relaxed">
+            Play live with friends across phones, tablets, and laptops using a 5-character room code—or practice locally against AI bots or pass-and-play.
+          </p>
+        </div>
+
+        <div class="p-6 sm:p-8 space-y-6">
+          <!-- Mode Selector -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">1. Select Play Mode</label>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button type="button" id="mode-btn-online" onclick="setSetupMode('online')" class="p-4 rounded-2xl border-2 border-sky-500 bg-sky-500/10 text-left transition flex flex-col justify-between gap-2">
+                <div class="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+                </div>
+                <div>
+                  <div class="font-bold text-white text-sm sm:text-base">Online Multi-Device</div>
+                  <div class="text-xs text-slate-300 mt-1">Create or join a live room across devices (+ optional AI bots).</div>
+                </div>
+              </button>
+
+              <button type="button" id="mode-btn-pve" onclick="setSetupMode('pve')" class="p-4 rounded-2xl border-2 border-slate-800 bg-slate-900/60 hover:border-slate-700 text-left transition flex flex-col justify-between gap-2">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </div>
+                <div>
+                  <div class="font-bold text-white text-sm sm:text-base">Solo vs AI Bots</div>
+                  <div class="text-xs text-slate-400 mt-1">Instant single-device match against smart AI deduction bots.</div>
+                </div>
+              </button>
+
+              <button type="button" id="mode-btn-pvp" onclick="setSetupMode('pvp')" class="p-4 rounded-2xl border-2 border-slate-800 bg-slate-900/60 hover:border-slate-700 text-left transition flex flex-col justify-between gap-2">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </div>
+                <div>
+                  <div class="font-bold text-white text-sm sm:text-base">Pass & Play (1 Device)</div>
+                  <div class="text-xs text-slate-400 mt-1">2–6 friends sharing one screen with private ballot pass-arounds.</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- ==================== ONLINE MULTI-DEVICE PANEL ==================== -->
+          <div id="setup-online-panel" class="space-y-5 pt-1">
+            <div class="p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Your Display Nickname</label>
+              <input
+                type="text"
+                id="online-nickname-input"
+                maxlength="18"
+                placeholder="Enter your nickname (e.g., Alex)"
+                class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold text-sm sm:text-base focus:outline-none focus:border-sky-500"
+              />
+              <div id="cloud-auth-status" class="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>Connecting to multiplayer server...</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Create Room Card -->
+              <div class="p-5 rounded-2xl bg-gradient-to-br from-sky-950/50 to-slate-950 border border-sky-500/30 flex flex-col justify-between gap-4">
+                <div>
+                  <div class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">Host a New Table</div>
+                  <h3 class="font-bold text-white text-lg">Create Room</h3>
+                  <p class="text-xs text-slate-400 mt-1">Generates a 5-character invite code. Add friends on their devices and optionally fill seats with AI bots.</p>
+                </div>
+                <button type="button" id="btn-create-room" onclick="createOnlineRoom()" class="w-full py-3.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-sky-950/50 transition">
+                  Create Live Room →
+                </button>
+              </div>
+
+              <!-- Join Room Card -->
+              <div class="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-4">
+                <div>
+                  <div class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">Have an Invite Code?</div>
+                  <h3 class="font-bold text-white text-lg">Join Room</h3>
+                  <input
+                    type="text"
+                    id="online-join-code-input"
+                    maxlength="5"
+                    placeholder="ABCDE"
+                    oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"
+                    class="mt-2.5 w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 font-mono font-extrabold text-xl tracking-[0.25em] text-center text-white uppercase focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button type="button" id="btn-join-room" onclick="joinOnlineRoom()" class="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-950/50 transition">
+                  Join Room →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== LOCAL (PVE / PASS-AND-PLAY) PANEL ==================== -->
+          <div id="setup-local-panel" class="hidden space-y-5">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400">2. Number of Players</label>
+                <span id="setup-round-preview" class="text-xs font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">Max Rounds: 18 (4×4 + 2)</span>
+              </div>
+              <div class="grid grid-cols-5 gap-2 sm:gap-3" id="player-count-buttons">
+                <button type="button" onclick="setPlayerCount(2)" data-count="2" class="count-btn py-3 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 font-mono font-bold text-sm sm:text-base text-slate-300 transition">2P</button>
+                <button type="button" onclick="setPlayerCount(3)" data-count="3" class="count-btn py-3 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 font-mono font-bold text-sm sm:text-base text-slate-300 transition">3P</button>
+                <button type="button" onclick="setPlayerCount(4)" data-count="4" class="count-btn py-3 rounded-xl border-2 border-emerald-500 bg-emerald-500/15 font-mono font-bold text-sm sm:text-base text-emerald-300 transition">4P ★</button>
+                <button type="button" onclick="setPlayerCount(5)" data-count="5" class="count-btn py-3 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 font-mono font-bold text-sm sm:text-base text-slate-300 transition">5P</button>
+                <button type="button" onclick="setPlayerCount(6)" data-count="6" class="count-btn py-3 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 font-mono font-bold text-sm sm:text-base text-slate-300 transition">6P</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">3. Seat Roster & Names</label>
+              <div id="setup-names-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            </div>
+
+            <button type="button" onclick="startLocalMatch()" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-base sm:text-lg shadow-xl shadow-emerald-950/60 transition flex items-center justify-center gap-2">
+              <span>Deal Secret Numbers & Start Local Match</span>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            </button>
+          </div>
+
+          <!-- Operator Card Quick Legend -->
+          <div class="rounded-2xl bg-slate-950/70 border border-slate-800/90 p-4">
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Operator Cards (Every Player Starts With 1 Set)</div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+                <div class="font-mono font-extrabold text-emerald-400 text-sm mb-0.5">+ ADD</div>
+                <div class="text-slate-300">Exact sum: <span class="font-mono text-white">A + B</span></div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                <div class="font-mono font-extrabold text-amber-400 text-sm mb-0.5">× MULTIPLY</div>
+                <div class="text-slate-300">Last digit of <span class="font-mono text-white">A × B</span></div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/25">
+                <div class="font-mono font-extrabold text-sky-400 text-sm mb-0.5">÷ DIVIDE</div>
+                <div class="text-slate-300">Quotient <span class="font-mono text-white">⌊max ÷ min⌋</span></div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/25">
+                <div class="font-mono font-extrabold text-purple-400 text-sm mb-0.5">0 ZERO</div>
+                <div class="text-slate-300">Count of 10s <span class="font-mono text-white">strictly between</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 1B: ONLINE WAITING ROOM LOBBY ==================== -->
+    <section id="view-online-lobby" class="hidden max-w-3xl mx-auto animate-pop">
+      <div class="rounded-3xl bg-felt-900/95 border border-slate-800 shadow-2xl overflow-hidden">
+        <!-- Room Code Header -->
+        <div class="p-6 sm:p-8 border-b border-slate-800 bg-gradient-to-br from-sky-950/60 via-felt-900 to-emerald-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">Live Multiplayer Room</div>
+            <div class="flex items-center gap-3">
+              <span id="lobby-room-code-display" class="font-mono text-3xl sm:text-4xl font-extrabold tracking-[0.2em] text-white">-----</span>
+              <button type="button" onclick="copyRoomInvite()" class="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-200 text-xs font-bold flex items-center gap-1.5 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <span>Copy Code</span>
+              </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-1.5">Share this 5-character code with friends so they can join from their own phones or computers.</p>
+          </div>
+
+          <div class="bg-slate-950/80 border border-slate-800 px-4 py-3 rounded-2xl text-right shrink-0">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Seats Filled</div>
+            <div id="lobby-seat-count" class="font-mono text-2xl font-extrabold text-emerald-400">1 / 6</div>
+            <div id="lobby-round-limit-note" class="text-[11px] text-slate-400 mt-0.5">Need 2+ players</div>
+          </div>
+        </div>
+
+        <div class="p-6 sm:p-8 space-y-6">
+          <!-- Connected Players List -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Connected Players & Seats</h3>
+              <button type="button" id="btn-lobby-add-bot" onclick="hostAddBotToLobby()" class="hidden px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition">
+                + Add AI Bot Seat
+              </button>
+            </div>
+            <div id="lobby-players-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Host vs Guest Action Footer -->
+          <div id="lobby-host-controls" class="hidden pt-2">
+            <button type="button" id="btn-host-start-online" onclick="hostStartOnlineMatch()" disabled class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-extrabold text-base sm:text-lg shadow-xl transition">
+              Deal Secret Numbers & Start Match
+            </button>
+          </div>
+
+          <div id="lobby-guest-waiting" class="hidden p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
+            <div class="inline-flex items-center gap-2 text-sm font-semibold text-sky-300">
+              <span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
+              <span>Waiting for the room host to start the match...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: ACTIVE GAME TABLE ==================== -->
+    <section id="view-game" class="hidden space-y-6">
+
+      <!-- Incoming Live Trade Proposal Banner (Online Mode — Shown when someone proposes to YOU) -->
+      <div id="incoming-proposal-banner" class="hidden rounded-2xl bg-gradient-to-r from-amber-950/90 via-felt-900 to-emerald-950/90 border-2 border-amber-400/70 p-4 sm:p-5 shadow-2xl animate-pop">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-start gap-3.5">
+            <div class="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center shrink-0 font-extrabold text-lg animate-bounce">
+              !
+            </div>
+            <div>
+              <div class="text-xs font-bold uppercase tracking-wider text-amber-300">Incoming Pair & Card Proposal</div>
+              <div id="incoming-proposal-text" class="text-base sm:text-lg font-extrabold text-white mt-0.5">
+                Alice wants to pair up with you!
+              </div>
+              <div id="incoming-proposal-cards" class="flex flex-wrap gap-1.5 mt-2">
+                <!-- Card pills -->
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2.5 shrink-0">
+            <button type="button" onclick="respondToIncomingProposal(true)" class="flex-1 md:flex-initial px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm shadow-lg transition">
+              ✓ Accept & Reveal
+            </button>
+            <button type="button" onclick="respondToIncomingProposal(false)" class="flex-1 md:flex-initial px-4 py-3 rounded-xl bg-slate-800 hover:bg-rose-950/80 text-rose-300 border border-slate-700 hover:border-rose-500/50 font-bold text-sm transition">
+              ✕ Decline
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outgoing Pending Proposal Banner (Online Mode — Shown while waiting for target to respond) -->
+      <div id="outgoing-proposal-banner" class="hidden rounded-2xl bg-sky-950/50 border border-sky-500/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full bg-sky-400 animate-ping shrink-0"></span>
+          <div id="outgoing-proposal-text" class="text-xs sm:text-sm font-semibold text-sky-200">
+            Waiting for opponent to accept your proposal...
+          </div>
+        </div>
+        <button type="button" onclick="cancelOutgoingProposal()" class="self-start sm:self-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 transition">
+          Cancel Offer
+        </button>
+      </div>
+
+      <!-- Top Status & End-Vote Bar -->
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-felt-900/90 border border-slate-800 shadow-lg">
+        <div class="flex flex-wrap items-center gap-4">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Progress</div>
+            <div class="flex items-baseline gap-2">
+              <span id="table-round-display" class="font-mono text-2xl font-extrabold text-white">Round 1</span>
+              <span id="table-max-round-display" class="font-mono text-sm text-slate-400">of 18</span>
+            </div>
+          </div>
+          <div class="h-8 w-px bg-slate-800 hidden sm:block"></div>
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Clues Revealed</div>
+            <div id="table-clues-count" class="font-mono text-xl font-bold text-emerald-400">0</div>
+          </div>
+          <div class="h-8 w-px bg-slate-800 hidden sm:block"></div>
+          <div id="stalemate-warning-pill" class="hidden items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+            <span>⚠️ No two players currently share a card! Buy a set or vote to end.</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Unanimous Vote Counter Pill (Online Mode) -->
+          <div id="end-vote-status-pill" class="hidden items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
+            <span>End Votes:</span>
+            <span id="end-vote-count-text" class="font-mono font-bold text-amber-400">0 / 2</span>
+          </div>
+
+          <button type="button" id="btn-end-match-action" onclick="handleEndMatchAction()" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-950/40 transition flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span id="btn-end-match-label">End & Submit Guesses</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main 2-Column Arena Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- LEFT COLUMN (7 cols): Players Table + Pairing Builder -->
+        <div class="lg:col-span-7 space-y-6">
+
+          <!-- Players Arena Grid -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <span>Table Seats & Hands</span>
+                <span class="text-xs font-normal normal-case text-slate-400">(Tap a seat to pair up)</span>
+              </h2>
+            </div>
+            <div id="players-arena-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <!-- Player Cards rendered here -->
+            </div>
+          </div>
+
+          <!-- AI Bot Trade Proposals (Local PvE Only) -->
+          <div id="bot-proposals-panel" class="hidden rounded-2xl bg-gradient-to-r from-indigo-950/50 via-felt-900 to-emerald-950/40 border border-indigo-500/30 p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-indigo-300">Live Bot Table Chatter</h3>
+              </div>
+              <button type="button" onclick="simulateBotPairTurn()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                Let Two Bots Pair Up →
+              </button>
+            </div>
+            <div id="bot-proposals-list" class="space-y-2.5"></div>
+          </div>
+
+          <!-- Interactive Pairing & Deal Builder -->
+          <div class="rounded-2xl bg-felt-900/95 border border-slate-800 p-5 sm:p-6 shadow-xl">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 id="builder-title" class="text-base sm:text-lg font-bold text-white">Pair & Play Cards</h3>
+                <p id="builder-subtitle" class="text-xs text-slate-400">Both players spend 1 copy of each chosen card. Each card advances 1 round.</p>
+              </div>
+              <div id="pair-round-cost-badge" class="px-3 py-1 rounded-lg bg-slate-800 border border-slate-700 font-mono text-xs font-bold text-slate-300">
+                +0 Rounds
+              </div>
+            </div>
+
+            <!-- Partner Selectors -->
+            <div class="grid grid-cols-1 sm:grid-cols-11 gap-3 items-center mb-5">
+              <div class="sm:col-span-5">
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Partner A</label>
+                <select id="select-partner-a" onchange="onPartnerSelectionChange()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-75">
+                </select>
+              </div>
+
+              <div class="sm:col-span-1 flex justify-center pt-4">
+                <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold text-xs">
+                  &amp;
+                </div>
+              </div>
+
+              <div class="sm:col-span-5">
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Partner B</label>
+                <select id="select-partner-b" onchange="onPartnerSelectionChange()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold text-sm focus:outline-none focus:border-emerald-500">
+                </select>
+              </div>
+            </div>
+
+            <!-- Card Selection Toggles -->
+            <div class="mb-5">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Select Shared Operator Card(s) to Spend</label>
+                <button type="button" onclick="selectAllSharedCards()" class="text-xs text-emerald-400 hover:text-emerald-300 font-semibold">Select All Shared</button>
+              </div>
+              <div id="card-selector-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+            </div>
+
+            <!-- Execute / Propose Deal Action -->
+            <button type="button" id="btn-execute-deal" onclick="handleDealBuilderSubmit()" disabled class="w-full py-3.5 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-extrabold text-sm sm:text-base shadow-lg transition flex items-center justify-center gap-2">
+              <span>Select Players & Card(s) to Play</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN (5 cols): Latest Reveal Spotlight + Live Clue Log -->
+        <div class="lg:col-span-5 space-y-6">
+
+          <!-- Latest Result Spotlight Card -->
+          <div id="latest-result-card" class="rounded-2xl bg-felt-900/95 border border-slate-800 p-5 shadow-xl">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Latest Deal Result</span>
+              <span id="latest-result-round" class="text-xs font-mono text-slate-500">Waiting for Round 1</span>
+            </div>
+            <div id="latest-result-content" class="py-6 text-center rounded-xl bg-slate-950/70 border border-dashed border-slate-800">
+              <div class="text-slate-500 text-sm">Pair two players and play operator cards to reveal clues here.</div>
+            </div>
+          </div>
+
+          <!-- Clue History Log -->
+          <div class="rounded-2xl bg-felt-900/95 border border-slate-800 p-5 shadow-xl flex flex-col max-h-[520px]">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300">Clue History Feed</h3>
+              <select id="clue-filter-player" onchange="renderClueLog()" class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-300 focus:outline-none">
+                <option value="all">All Players</option>
+              </select>
+            </div>
+            <div id="clue-log-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              <div class="text-xs text-slate-500 text-center py-8">No clues recorded yet.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: FINAL GUESSING PHASE ==================== -->
+    <section id="view-guessing" class="hidden max-w-3xl mx-auto animate-pop">
+      <!-- Pass-the-Device Privacy Interstitial (Local PvP Only) -->
+      <div id="pvp-privacy-screen" class="hidden rounded-3xl bg-felt-900 border border-amber-500/40 p-8 sm:p-10 text-center shadow-2xl">
+        <div class="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-5">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </div>
+        <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2">Pass-and-Play Privacy Shield</div>
+        <h2 id="pvp-pass-title" class="text-2xl sm:text-3xl font-extrabold text-white mb-3">Pass Device to Alice</h2>
+        <p class="text-slate-400 text-sm sm:text-base max-w-md mx-auto mb-8">
+          Make sure no other players are looking at the screen before you open your private guess ballot.
+        </p>
+        <button type="button" onclick="revealCurrentPvPBallot()" class="px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-base shadow-xl transition">
+          I Am Ready — Open My Ballot
+        </button>
+      </div>
+
+      <!-- Waiting for Other Devices Screen (Online Mode after locking in ballot) -->
+      <div id="online-ballot-waiting-screen" class="hidden rounded-3xl bg-felt-900 border border-sky-500/35 p-8 sm:p-10 text-center shadow-2xl space-y-5">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">Ballot Locked In</div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white">Waiting for Other Players...</h2>
+          <p class="text-slate-400 text-sm mt-2 max-w-md mx-auto">
+            As soon as every player at the table locks in their guesses, all secret numbers will be revealed simultaneously.
+          </p>
+        </div>
+        <div id="online-ballot-progress-list" class="max-w-md mx-auto grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
+          <!-- Shows who has submitted vs still deciding -->
+        </div>
+      </div>
+
+      <!-- Active Guess Ballot Form -->
+      <div id="guess-ballot-card" class="rounded-3xl bg-felt-900/95 border border-slate-800 shadow-2xl overflow-hidden">
+        <div class="p-6 sm:p-8 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-felt-900 to-amber-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">Final Deduction Ballot</div>
+            <h2 id="ballot-player-heading" class="text-2xl font-extrabold text-white">Submit Your Guesses</h2>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">Leave any field blank to pass safely with <span class="text-slate-200 font-semibold">0 penalty</span>.</p>
+          </div>
+          <button type="button" onclick="toggleScratchpad()" class="self-start sm:self-center px-3.5 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold transition">
+            Open Deduction Pad
+          </button>
+        </div>
+
+        <div class="p-6 sm:p-8 space-y-6">
+          <!-- Scoring Quick Reference -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+              <div class="font-bold text-emerald-300">Own Number</div>
+              <div class="text-slate-300 mt-0.5">Exact: <span class="font-mono font-bold text-emerald-400">+3 pts</span> | Wrong: <span class="font-mono font-bold text-rose-400">-3 pts</span></div>
+            </div>
+            <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-500/25">
+              <div class="font-bold text-sky-300">Opponent Number</div>
+              <div class="text-slate-300 mt-0.5">Exact: <span class="font-mono font-bold text-emerald-400">+2 pts</span> (them <span class="font-mono text-rose-400">-2</span>)</div>
+            </div>
+            <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25">
+              <div class="font-bold text-rose-300">Wrong Opponent Guess</div>
+              <div class="text-slate-300 mt-0.5">Guesser: <span class="font-mono font-bold text-rose-400">-2 pts</span> (them 0)</div>
+            </div>
+          </div>
+
+          <!-- Ballot Inputs Container -->
+          <div id="ballot-inputs-container" class="space-y-4"></div>
+
+          <div class="pt-2 flex flex-col sm:flex-row gap-3">
+            <button type="button" onclick="submitCurrentBallot()" id="btn-submit-ballot" class="flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-base shadow-xl transition">
+              Lock In Final Guesses
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: FINAL REVEAL & SCOREBOARD ==================== -->
+    <section id="view-results" class="hidden max-w-5xl mx-auto space-y-6 animate-pop">
+      <!-- Winner Banner -->
+      <div class="rounded-3xl bg-gradient-to-br from-emerald-950/80 via-felt-900 to-amber-950/50 border border-emerald-500/30 p-6 sm:p-10 text-center shadow-2xl relative overflow-hidden">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider mb-3">
+          <span>Match Complete • All Secret Numbers Revealed</span>
+        </div>
+        <h2 id="winner-headline" class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">Alice Wins!</h2>
+        <p id="winner-subtext" class="text-slate-300 text-sm sm:text-base max-w-xl mx-auto">Final scores include own-number deductions, opponent snipes, and card set purchase penalties.</p>
+      </div>
+
+      <!-- Secret Numbers Reveal Strip -->
+      <div id="revealed-numbers-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+
+      <!-- Detailed Scoreboard Table -->
+      <div class="rounded-2xl bg-felt-900/95 border border-slate-800 shadow-xl overflow-hidden">
+        <div class="p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-bold text-white text-base sm:text-lg">Final Standings & Guess Breakdown</h3>
+          <span id="results-end-reason" class="text-xs font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg"></span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-slate-950/50">
+                <th class="py-3.5 px-4">Rank</th>
+                <th class="py-3.5 px-4">Player</th>
+                <th class="py-3.5 px-4 text-center">Secret #</th>
+                <th class="py-3.5 px-4">Own Guess</th>
+                <th class="py-3.5 px-4">Opponent Guesses</th>
+                <th class="py-3.5 px-4 text-center">Penalties / Sniped</th>
+                <th class="py-3.5 px-4 text-right">Total Score</th>
+              </tr>
+            </thead>
+            <tbody id="scoreboard-tbody" class="divide-y divide-slate-800/70 text-sm"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Complete Clue Audit Log -->
+      <div class="rounded-2xl bg-felt-900/95 border border-slate-800 p-5 sm:p-6 shadow-xl">
+        <h3 class="font-bold text-white text-base mb-1">Dealer Math Verification Audit</h3>
+        <p class="text-xs text-slate-400 mb-4">Every clue announced during the match verified against the true secret numbers.</p>
+        <div id="audit-clues-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </div>
+
+      <!-- Play Again CTA -->
+      <div class="flex flex-wrap justify-center gap-4 pb-8">
+        <button type="button" id="btn-play-again-same" onclick="handlePlayAgainSameRoom()" class="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm sm:text-base shadow-lg transition">
+          Play Again in Same Room
+        </button>
+        <button type="button" onclick="leaveCurrentMatch()" class="px-6 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm sm:text-base border border-slate-700 transition">
+          Back to Main Lobby
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== SLIDE-OVER DEDUCTION SCRATCHPAD (1–100 GRID) ==================== -->
+  <aside id="scratchpad-drawer" class="fixed inset-y-0 right-0 z-40 w-full max-w-md bg-felt-950/98 backdrop-blur-xl border-l border-slate-800 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col">
+    <div class="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+      <div>
+        <h3 class="font-bold text-white text-base flex items-center gap-2">
+          <span>Private Deduction Pad</span>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">1–100</span>
+        </h3>
+        <p class="text-xs text-slate-400">Your private notes—never shared with other devices.</p>
+      </div>
+      <button type="button" onclick="toggleScratchpad()" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="px-4 pt-3 border-b border-slate-800 bg-slate-900/50">
+      <div id="scratchpad-tabs" class="flex gap-1.5 overflow-x-auto pb-3"></div>
+    </div>
+
+    <div class="p-3.5 bg-slate-900/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+      <div class="text-xs text-slate-300">
+        Remaining: <span id="scratchpad-remaining-count" class="font-mono font-bold text-emerald-400">100</span> / 100
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="autoEliminateCandidates()" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1">
+          <span>⚡ Smart Auto-Filter</span>
+        </button>
+        <button type="button" onclick="resetCurrentScratchpad()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4">
+      <div id="scratchpad-grid" class="grid grid-cols-10 gap-1.5"></div>
+    </div>
+
+    <div class="p-3.5 border-t border-slate-800 bg-slate-950 text-[11px] text-slate-400 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-slate-600 inline-block"></span> Possible</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500/30 border border-amber-400 inline-block"></span> Highlight</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-950 border border-slate-800 opacity-40 inline-block"></span> Ruled Out</span>
+      </div>
+      <span>Tap to cycle</span>
+    </div>
+  </aside>
+
+  <!-- ==================== RULES MODAL ==================== -->
+  <div id="modal-rules" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-felt-900 border border-slate-700 rounded-3xl max-w-2xl w-full max-h-[88vh] flex flex-col shadow-2xl animate-pop">
+      <div class="p-5 sm:p-6 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-lg sm:text-xl font-extrabold text-white">Blind Number Deduction — Official Rules</h3>
+        <button type="button" onclick="closeModal('modal-rules')" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-4 text-sm text-slate-300 leading-relaxed">
+        <div>
+          <h4 class="font-bold text-white mb-1">1. Secret Numbers & Starting Hands</h4>
+          <p>Every player receives a unique hidden whole number from <strong class="text-emerald-400">1 to 100</strong>—nobody sees their own number or anyone else's. Everyone starts with 4 cards: <strong>Add</strong>, <strong>Multiply</strong>, <strong>Divide</strong>, and <strong>Zero</strong>.</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-white mb-1">2. Pairing Up & Spending Cards</h4>
+          <p>Two players agree to pair up and play one or more shared card types together. <strong>Both players</strong> spend 1 copy of each played card. Playing <em>k</em> cards in one deal advances the round counter by <em>k</em> rounds.</p>
+          <ul class="list-disc pl-5 mt-2 space-y-1 text-slate-300">
+            <li><strong class="text-emerald-400">Add (+):</strong> Exact sum (<code class="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">A + B</code>).</li>
+            <li><strong class="text-amber-400">Multiply (×):</strong> Last digit of product (<code class="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">(A × B) mod 10</code>).</li>
+            <li><strong class="text-sky-400">Divide (÷):</strong> Integer quotient (<code class="font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">⌊max(A,B) ÷ min(A,B)⌋</code>).</li>
+            <li><strong class="text-purple-400">Zero (0):</strong> Count of multiples of 10 (10, 20, …, 90) <strong>strictly between</strong> the two numbers (excluding A and B themselves).</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-white mb-1">3. Buying Extra Card Sets</h4>
+          <p>Any player may buy a fresh set of all 4 cards at any time (unlimited sets, 0 rounds spent) at a cost of <strong class="text-rose-400">-1 point</strong> at the end of the game.</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-white mb-1">4. Game End & Scoring</h4>
+          <p>The game ends after <strong class="font-mono text-amber-300">4 × Players + 2</strong> rounds, when no playable pairs remain, or when all players vote to end early:</p>
+          <ul class="list-disc pl-5 mt-2 space-y-1">
+            <li><strong>Your Own Number:</strong> Exact = <span class="text-emerald-400 font-bold">+3 pts</span> | Wrong = <span class="text-rose-400 font-bold">-3 pts</span> | Blank = 0 pts.</li>
+            <li><strong>Another Player's Number:</strong> Exact = <span class="text-emerald-400 font-bold">+2 pts</span> to you and <span class="text-rose-400 font-bold">-2 pts</span> to them | Wrong = <span class="text-rose-400 font-bold">-2 pts</span> to you | Blank = 0 pts.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="p-4 border-t border-slate-800 flex justify-end">
+        <button type="button" onclick="closeModal('modal-rules')" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase & Game Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // =========================================================================
+    // FIREBASE INITIALIZATION & AUTHENTICATION (STRICT PATHS & AUTH FIRST)
+    // =========================================================================
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'blind-number-deduction';
+    let firebaseReady = false;
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+
+    async function initCloudBackend() {
+      const statusEl = document.getElementById('cloud-auth-status');
+      try {
+        if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+          throw new Error('Cloud configuration unavailable');
+        }
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        currentUser = auth.currentUser;
+        if (!currentUser) {
+          await new Promise(resolve => {
+            const unsub = onAuthStateChanged(auth, u => {
+              if (u) {
+                currentUser = u;
+                unsub();
+                resolve();
+              }
+            });
+          });
+        }
+
+        firebaseReady = true;
+        if (statusEl) {
+          statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span class="text-emerald-300">Connected to live multiplayer server</span>`;
+        }
+      } catch (err) {
+        console.warn('Multiplayer server init notice:', err);
+        if (statusEl) {
+          statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span><span class="text-rose-300">Online server unavailable — local modes active</span>`;
+        }
+      }
+    }
+
+    // =========================================================================
+    // CONSTANTS & GAME STATE
+    // =========================================================================
+    const OPERATORS = [
+      { id: 'add', label: 'Add', symbol: '+', shortDesc: 'A + B', color: 'emerald' },
+      { id: 'multiply', label: 'Multiply', symbol: '×', shortDesc: 'Last digit of A×B', color: 'amber' },
+      { id: 'divide', label: 'Divide', symbol: '÷', shortDesc: '⌊max ÷ min⌋', color: 'sky' },
+      { id: 'zero', label: 'Zero', symbol: '0', shortDesc: '10s strictly between', color: 'purple' }
+    ];
+
+    const BOT_PROFILES = [
+      { name: 'Bot Rex' },
+      { name: 'Bot Nova' },
+      { name: 'Bot Sage' },
+      { name: 'Bot Vex' },
+      { name: 'Bot Echo' }
+    ];
+
+    let setupState = {
+      mode: 'online', // 'online' | 'pve' | 'pvp'
+      playerCount: 4,
+      names: ['You', 'Bot Rex', 'Bot Nova', 'Bot Sage', 'Bot Vex', 'Bot Echo']
+    };
+
+    // Unified Game State (used for both local modes & synced online rooms)
+    let gameState = null;
+
+    // Online Room Session Context
+    let onlineSession = {
+      active: false,
+      roomCode: null,
+      myUid: null,
+      unsubRoom: null,
+      unsubSecrets: null,
+      secretsMap: null, // Populated ONLY when room.phase === 'reveal'
+      lastRenderedMatchId: null,
+      lastClueCount: 0,
+      hasSubmittedOnlineBallot: false,
+      resolvingBallotsLock: false
+    };
+
+    // Private Local Deduction Scratchpad: { [playerId]: { [1..100]: 0|1|2 } }
+    let scratchpadState = {};
+    let activeScratchpadPlayerId = null;
+
+    // =========================================================================
+    // EXACT OPERATOR MATH FUNCTIONS
+    // =========================================================================
+    function computeOperatorResult(op, a, b) {
+      switch (op) {
+        case 'add':
+          return a + b;
+        case 'multiply':
+          return (a * b) % 10;
+        case 'divide': {
+          const high = Math.max(a, b);
+          const low = Math.min(a, b);
+          return Math.floor(high / low);
+        }
+        case 'zero': {
+          const low = Math.min(a, b);
+          const high = Math.max(a, b);
+          let count = 0;
+          for (let m = 10; m <= 90; m += 10) {
+            if (m > low && m < high) count++;
+          }
+          return count;
+        }
+        default:
+          return 0;
+      }
+    }
+
+    function generateUniqueSecrets(playerIds) {
+      const pool = Array.from({ length: 100 }, (_, i) => i + 1);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const map = {};
+      playerIds.forEach((pid, idx) => {
+        map[pid] = pool[idx];
+      });
+      return map;
+    }
+
+    // =========================================================================
+    // FIRESTORE COLLECTION HELPERS (STRICT RULE 1 PATHS)
+    // =========================================================================
+    function getRoomDocRef(code) {
+      return doc(db, 'artifacts', appId, 'public', 'data', 'bnd_rooms', code);
+    }
+
+    function getSecretsDocRef(code) {
+      // Stored in a separate reveal-locked collection as specified
+      return doc(db, 'artifacts', appId, 'public', 'data', 'bnd_room_secrets', code);
+    }
+
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 5; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return code;
+    }
+
+    // =========================================================================
+    // SETUP LOBBY UI & MODE SWITCHING
+    // =========================================================================
+    function initSetupLobby() {
+      setSetupMode('online');
+      setPlayerCount(4);
+
+      // Check URL hash/query for ?room=XXXXX invite link
+      const params = new URLSearchParams(window.location.search);
+      const roomParam = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+      if (roomParam.length === 5) {
+        document.getElementById('online-join-code-input').value = roomParam;
+      }
+    }
+
+    function setSetupMode(mode) {
+      setupState.mode = mode;
+      const modes = ['online', 'pve', 'pvp'];
+      const accentBorders = { online: 'border-sky-500 bg-sky-500/10', pve: 'border-emerald-500 bg-emerald-500/10', pvp: 'border-amber-500 bg-amber-500/10' };
+
+      modes.forEach(m => {
+        const btn = document.getElementById(`mode-btn-${m}`);
+        if (m === mode) {
+          btn.className = `p-4 rounded-2xl border-2 ${accentBorders[m]} text-left transition flex flex-col justify-between gap-2`;
+        } else {
+          btn.className = 'p-4 rounded-2xl border-2 border-slate-800 bg-slate-900/60 hover:border-slate-700 text-left transition flex flex-col justify-between gap-2';
+        }
+      });
+
+      const onlinePanel = document.getElementById('setup-online-panel');
+      const localPanel = document.getElementById('setup-local-panel');
+
+      if (mode === 'online') {
+        onlinePanel.classList.remove('hidden');
+        localPanel.classList.add('hidden');
+      } else {
+        onlinePanel.classList.add('hidden');
+        localPanel.classList.remove('hidden');
+        if (mode === 'pve') {
+          setupState.names[0] = 'You';
+          for (let i = 1; i < 6; i++) setupState.names[i] = BOT_PROFILES[i - 1].name;
+        } else {
+          const defaults = ['Alice', 'Bob', 'Carlie', 'David', 'Elena', 'Frank'];
+          for (let i = 0; i < 6; i++) setupState.names[i] = defaults[i];
+        }
+        renderSetupNames();
+      }
+    }
+
+    function setPlayerCount(count) {
+      setupState.playerCount = count;
+      const maxRounds = 4 * count + 2;
+      document.getElementById('setup-round-preview').textContent = `Max Rounds: ${maxRounds} (4×${count} + 2)`;
+
+      document.querySelectorAll('.count-btn').forEach(btn => {
+        const c = parseInt(btn.dataset.count, 10);
+        if (c === count) {
+          btn.className = 'count-btn py-3 rounded-xl border-2 border-emerald-500 bg-emerald-500/15 font-mono font-bold text-sm sm:text-base text-emerald-300 transition';
+        } else {
+          btn.className = 'count-btn py-3 rounded-xl border border-slate-700 bg-slate-900/70 hover:bg-slate-800 font-mono font-bold text-sm sm:text-base text-slate-300 transition';
+        }
+      });
+
+      renderSetupNames();
+    }
+
+    function renderSetupNames() {
+      const container = document.getElementById('setup-names-grid');
+      container.innerHTML = '';
+
+      for (let i = 0; i < setupState.playerCount; i++) {
+        const isBot = setupState.mode === 'pve' && i > 0;
+        const badge = isBot
+          ? `<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI Bot</span>`
+          : `<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Human</span>`;
+
+        const div = document.createElement('div');
+        div.className = 'flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800';
+        div.innerHTML = `
+          <div class="w-8 h-8 rounded-lg ${isBot ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'} font-mono font-bold text-xs flex items-center justify-center shrink-0">
+            P${i + 1}
+          </div>
+          <input
+            type="text"
+            maxlength="18"
+            value="${escapeHtml(setupState.names[i])}"
+            oninput="setupState.names[${i}] = this.value"
+            placeholder="Player ${i + 1}"
+            class="flex-1 bg-transparent text-sm font-semibold text-white focus:outline-none min-w-0"
+          />
+          ${badge}
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    // =========================================================================
+    // ONLINE ROOM CREATION, JOINING & REAL-TIME SYNC
+    // =========================================================================
+    async function createOnlineRoom() {
+      if (!firebaseReady || !currentUser) {
+        showToast('Multiplayer server is still connecting. Please wait a second.', 'amber');
+        return;
+      }
+
+      const rawNick = (document.getElementById('online-nickname-input').value || '').trim();
+      const nickname = rawNick || `Player_${currentUser.uid.slice(0, 4).toUpperCase()}`;
+
+      const btn = document.getElementById('btn-create-room');
+      btn.disabled = true;
+      btn.textContent = 'Creating Room...';
+
+      try {
+        let code = generateRoomCode();
+        let roomRef = getRoomDocRef(code);
+        const snap = await getDoc(roomRef);
+        if (snap.exists()) {
+          code = generateRoomCode();
+          roomRef = getRoomDocRef(code);
+        }
+
+        const hostPlayer = {
+          id: currentUser.uid,
+          name: nickname,
+          isBot: false,
+          isHost: true,
+          hand: { add: 1, multiply: 1, divide: 1, zero: 1 },
+          setsBought: 0
+        };
+
+        const initialRoomData = {
+          roomCode: code,
+          hostId: currentUser.uid,
+          phase: 'lobby', // 'lobby' | 'playing' | 'ballot' | 'reveal'
+          matchNumber: 0,
+          players: [hostPlayer],
+          currentRound: 1,
+          maxRounds: 10,
+          clues: [],
+          pendingProposal: null, // { id, fromId, fromName, toId, toName, ops: [] }
+          endVotes: [], // array of human player IDs voting to end
+          ballots: {}, // { [playerId]: { own, opponents } }
+          endReason: '',
+          updatedAt: Date.now()
+        };
+
+        await setDoc(roomRef, initialRoomData);
+        subscribeToOnlineRoom(code);
+        showToast(`Room ${code} created! Share the code with friends.`, 'sky');
+      } catch (err) {
+        console.error('Create room error:', err);
+        showToast('Could not create room. Please try again.', 'rose');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Live Room →';
+      }
+    }
+
+    async function joinOnlineRoom() {
+      if (!firebaseReady || !currentUser) {
+        showToast('Multiplayer server is still connecting. Please wait a second.', 'amber');
+        return;
+      }
+
+      const code = (document.getElementById('online-join-code-input').value || '').trim().toUpperCase();
+      if (code.length !== 5) {
+        showToast('Enter a valid 5-character room code.', 'amber');
+        return;
+      }
+
+      const rawNick = (document.getElementById('online-nickname-input').value || '').trim();
+      const nickname = rawNick || `Player_${currentUser.uid.slice(0, 4).toUpperCase()}`;
+
+      const btn = document.getElementById('btn-join-room');
+      btn.disabled = true;
+      btn.textContent = 'Joining...';
+
+      try {
+        const roomRef = getRoomDocRef(code);
+        const snap = await getDoc(roomRef);
+
+        if (!snap.exists()) {
+          showToast(`Room "${code}" was not found.`, 'rose');
+          return;
+        }
+
+        const room = snap.data();
+        const alreadyIn = (room.players || []).some(p => p.id === currentUser.uid);
+
+        if (!alreadyIn) {
+          if (room.phase !== 'lobby') {
+            showToast('That match has already started!', 'rose');
+            return;
+          }
+          if ((room.players || []).length >= 6) {
+            showToast('Room is full (maximum 6 players).', 'rose');
+            return;
+          }
+
+          const updatedPlayers = [
+            ...room.players,
+            {
+              id: currentUser.uid,
+              name: nickname,
+              isBot: false,
+              isHost: false,
+              hand: { add: 1, multiply: 1, divide: 1, zero: 1 },
+              setsBought: 0
+            }
+          ];
+
+          await updateDoc(roomRef, {
+            players: updatedPlayers,
+            updatedAt: Date.now()
+          });
+        }
+
+        subscribeToOnlineRoom(code);
+        showToast(`Joined Room ${code}!`, 'emerald');
+      } catch (err) {
+        console.error('Join room error:', err);
+        showToast('Failed to join room. Check the code and try again.', 'rose');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Join Room →';
+      }
+    }
+
+    function subscribeToOnlineRoom(code) {
+      cleanupOnlineListeners();
+
+      onlineSession = {
+        active: true,
+        roomCode: code,
+        myUid: currentUser.uid,
+        unsubRoom: null,
+        unsubSecrets: null,
+        secretsMap: null,
+        lastRenderedMatchId: null,
+        lastClueCount: 0,
+        hasSubmittedOnlineBallot: false,
+        resolvingBallotsLock: false
+      };
+
+      // Update header indicators
+      document.getElementById('header-online-pill').classList.remove('hidden');
+      document.getElementById('header-online-pill').classList.add('sm:inline-flex');
+      document.getElementById('header-room-badge').classList.remove('hidden');
+      document.getElementById('header-room-badge').classList.add('flex');
+      document.getElementById('header-room-code').textContent = code;
+      document.getElementById('btn-new-game-header').classList.remove('hidden');
+      document.getElementById('btn-new-game-header').classList.add('flex');
+
+      const roomRef = getRoomDocRef(code);
+      onlineSession.unsubRoom = onSnapshot(
+        roomRef,
+        (docSnap) => {
+          if (!docSnap.exists()) {
+            showToast('The room was closed.', 'rose');
+            leaveCurrentMatch();
+            return;
+          }
+          handleOnlineRoomSnapshot(docSnap.data());
+        },
+        (error) => {
+          console.error('Room listener error:', error);
+          showToast('Connection interrupted. Retrying...', 'amber');
+        }
+      );
+    }
+
+    function cleanupOnlineListeners() {
+      if (onlineSession.unsubRoom) {
+        onlineSession.unsubRoom();
+        onlineSession.unsubRoom = null;
+      }
+      if (onlineSession.unsubSecrets) {
+        onlineSession.unsubSecrets();
+        onlineSession.unsubSecrets = null;
+      }
+    }
+
+    function copyRoomInvite() {
+      const code = onlineSession.roomCode;
+      if (!code) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', code);
+      const shareText = `Join my Blind Number Deduction room! Code: ${code} — ${url.toString()}`;
+
+      const tempInput = document.createElement('textarea');
+      tempInput.value = shareText;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+
+      showToast(`Copied invite & room code "${code}" to clipboard!`, 'sky');
+    }
+
+    async function handleOnlineRoomSnapshot(room) {
+      const myUid = onlineSession.myUid;
+      const isHost = room.hostId === myUid;
+      const matchKey = `${room.roomCode}_m${room.matchNumber}`;
+
+      // Reset local scratchpad and ballot submission flags when a new match starts
+      if (onlineSession.lastRenderedMatchId !== matchKey) {
+        onlineSession.lastRenderedMatchId = matchKey;
+        onlineSession.lastClueCount = 0;
+        onlineSession.hasSubmittedOnlineBallot = false;
+        onlineSession.resolvingBallotsLock = false;
+        onlineSession.secretsMap = null;
+        if (onlineSession.unsubSecrets) {
+          onlineSession.unsubSecrets();
+          onlineSession.unsubSecrets = null;
+        }
+
+        scratchpadState = {};
+        (room.players || []).forEach(p => {
+          scratchpadState[p.id] = {};
+          for (let n = 1; n <= 100; n++) scratchpadState[p.id][n] = 0;
+        });
+        activeScratchpadPlayerId = myUid;
+      }
+
+      // Build unified gameState mirror
+      const prevPartnerB = gameState ? gameState.selectedPartnerB : null;
+      const prevSelectedCards = gameState ? gameState.selectedCards : new Set();
+
+      const otherPlayers = (room.players || []).filter(p => p.id !== myUid);
+      const defaultPartnerB = otherPlayers.some(p => p.id === prevPartnerB)
+        ? prevPartnerB
+        : (otherPlayers[0] ? otherPlayers[0].id : myUid);
+
+      gameState = {
+        mode: 'online',
+        roomCode: room.roomCode,
+        hostId: room.hostId,
+        isHost,
+        myUid,
+        phase: room.phase,
+        matchNumber: room.matchNumber,
+        players: (room.players || []).map(p => ({
+          ...p,
+          // Secret numbers remain hidden until phase === 'reveal'
+          secretNumber: (room.phase === 'reveal' && onlineSession.secretsMap)
+            ? onlineSession.secretsMap[p.id]
+            : null
+        })),
+        currentRound: room.currentRound || 1,
+        maxRounds: room.maxRounds || (4 * (room.players || []).length + 2),
+        clues: room.clues || [],
+        pendingProposal: room.pendingProposal || null,
+        endVotes: room.endVotes || [],
+        ballots: room.ballots || {},
+        endReason: room.endReason || '',
+        selectedPartnerA: myUid,
+        selectedPartnerB: defaultPartnerB,
+        selectedCards: prevSelectedCards
+      };
+
+      // PHASE 1: LOBBY
+      if (room.phase === 'lobby') {
+        document.getElementById('header-round-badge').classList.add('hidden');
+        document.getElementById('btn-toggle-scratchpad').classList.add('hidden');
+        renderOnlineLobby(room);
+        switchView('view-online-lobby');
+        return;
+      }
+
+      // Show Round Badge & Deduction Pad button during active match phases
+      document.getElementById('header-round-badge').classList.remove('hidden');
+      document.getElementById('header-round-badge').classList.add('flex');
+      document.getElementById('btn-toggle-scratchpad').classList.remove('hidden');
+      document.getElementById('btn-toggle-scratchpad').classList.add('flex');
+
+      // PHASE 2: PLAYING
+      if (room.phase === 'playing') {
+        switchView('view-game');
+        if (gameState.clues.length > onlineSession.lastClueCount) {
+          onlineSession.lastClueCount = gameState.clues.length;
+          renderLatestResultSpotlight(gameState.clues[0]);
+        } else if (gameState.clues.length === 0) {
+          document.getElementById('latest-result-round').textContent = 'Waiting for Round 1';
+          document.getElementById('latest-result-content').className = 'py-6 text-center rounded-xl bg-slate-950/70 border border-dashed border-slate-800';
+          document.getElementById('latest-result-content').innerHTML = `<div class="text-slate-500 text-sm">Pair with another player and play operator cards to reveal clues here.</div>`;
+        }
+        renderGameScreen();
+        return;
+      }
+
+      // PHASE 3: SIMULTANEOUS SECRET BALLOT
+      if (room.phase === 'ballot') {
+        closeScratchpad();
+        switchView('view-guessing');
+        document.getElementById('pvp-privacy-screen').classList.add('hidden');
+
+        // Host auto-submits AI bot ballots once when entering ballot phase
+        if (isHost) {
+          await hostEnsureBotBallotsSubmitted(room);
+        }
+
+        const mySubmitted = Boolean(room.ballots && room.ballots[myUid]);
+        if (mySubmitted || onlineSession.hasSubmittedOnlineBallot) {
+          document.getElementById('guess-ballot-card').classList.add('hidden');
+          document.getElementById('online-ballot-waiting-screen').classList.remove('hidden');
+          renderOnlineBallotWaitingProgress(room);
+        } else {
+          document.getElementById('online-ballot-waiting-screen').classList.add('hidden');
+          document.getElementById('guess-ballot-card').classList.remove('hidden');
+          const me = gameState.players.find(p => p.id === myUid);
+          if (me) renderBallotFormForPlayer(me);
+        }
+
+        // Host checks if ALL players (humans + bots) have locked in their ballots
+        if (isHost && !onlineSession.resolvingBallotsLock) {
+          const allDone = (room.players || []).every(p => room.ballots && room.ballots[p.id]);
+          if (allDone && (room.players || []).length >= 2) {
+            onlineSession.resolvingBallotsLock = true;
+            await updateDoc(getRoomDocRef(room.roomCode), {
+              phase: 'reveal',
+              updatedAt: Date.now()
+            });
+          }
+        }
+        return;
+      }
+
+      // PHASE 4: REVEAL & SCOREBOARD
+      if (room.phase === 'reveal') {
+        if (!onlineSession.secretsMap) {
+          // Fetch secrets from the separate reveal-locked collection now that phase === 'reveal'
+          const secSnap = await getDoc(getSecretsDocRef(room.roomCode));
+          if (secSnap.exists()) {
+            onlineSession.secretsMap = secSnap.data().numbers || {};
+            gameState.players.forEach(p => {
+              p.secretNumber = onlineSession.secretsMap[p.id];
+            });
+          }
+        }
+        if (onlineSession.secretsMap) {
+          finalizeAndShowResults();
+        }
+      }
+    }
+
+    // =========================================================================
+    // ONLINE LOBBY CONTROLS (HOST ADD BOTS, REMOVE BOTS, START MATCH)
+    // =========================================================================
+    function renderOnlineLobby(room) {
+      const players = room.players || [];
+      const isHost = room.hostId === onlineSession.myUid;
+
+      document.getElementById('lobby-room-code-display').textContent = room.roomCode;
+      document.getElementById('lobby-seat-count').textContent = `${players.length} / 6`;
+
+      const roundLimit = 4 * players.length + 2;
+      document.getElementById('lobby-round-limit-note').textContent =
+        players.length >= 2 ? `Max Rounds: ${roundLimit}` : 'Need at least 2 players';
+
+      const addBotBtn = document.getElementById('btn-lobby-add-bot');
+      if (isHost && players.length < 6) {
+        addBotBtn.classList.remove('hidden');
+      } else {
+        addBotBtn.classList.add('hidden');
+      }
+
+      const listEl = document.getElementById('lobby-players-list');
+      listEl.innerHTML = players.map((p, idx) => {
+        const isMe = p.id === onlineSession.myUid;
+        const badge = p.isHost
+          ? `<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase">Host</span>`
+          : p.isBot
+          ? `<span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold uppercase">AI Bot</span>`
+          : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase">Ready</span>`;
+
+        const removeBotBtn = (isHost && p.isBot)
+          ? `<button type="button" onclick="hostRemoveBotFromLobby('${p.id}')" class="text-xs text-rose-400 hover:text-rose-300 font-bold px-2 py-1 rounded bg-rose-500/10">Remove</button>`
+          : '';
+
+        return `
+          <div class="p-3.5 rounded-2xl bg-slate-950/80 border ${isMe ? 'border-sky-500/50' : 'border-slate-800'} flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-9 h-9 rounded-xl ${p.isBot ? 'bg-indigo-500/20 text-indigo-300' : 'bg-sky-500/20 text-sky-300'} font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                P${idx + 1}
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold text-white text-sm truncate">
+                  ${escapeHtml(p.name)} ${isMe ? '<span class="text-sky-400 text-xs">(You)</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-400">${p.isBot ? 'AI Deduction Seat' : 'Connected Device'}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              ${badge}
+              ${removeBotBtn}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      if (isHost) {
+        document.getElementById('lobby-host-controls').classList.remove('hidden');
+        document.getElementById('lobby-guest-waiting').classList.add('hidden');
+        const startBtn = document.getElementById('btn-host-start-online');
+        startBtn.disabled = players.length < 2;
+        startBtn.textContent = players.length < 2
+          ? 'Waiting for at least 1 more player or AI bot...'
+          : `Deal Secret Numbers & Start Match (${players.length} Players)`;
+      } else {
+        document.getElementById('lobby-host-controls').classList.add('hidden');
+        document.getElementById('lobby-guest-waiting').classList.remove('hidden');
+      }
+    }
+
+    async function hostAddBotToLobby() {
+      if (!gameState || !gameState.isHost) return;
+      if (gameState.players.length >= 6) return;
+
+      const existingNames = new Set(gameState.players.map(p => p.name));
+      const botProfile = BOT_PROFILES.find(b => !existingNames.has(b.name)) || { name: `Bot_${gameState.players.length + 1}` };
+      const botId = `bot_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+
+      const updatedPlayers = [
+        ...gameState.players.map(({ secretNumber, ...rest }) => rest),
+        {
+          id: botId,
+          name: botProfile.name,
+          isBot: true,
+          isHost: false,
+          hand: { add: 1, multiply: 1, divide: 1, zero: 1 },
+          setsBought: 0
+        }
+      ];
+
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        players: updatedPlayers,
+        updatedAt: Date.now()
+      });
+    }
+
+    async function hostRemoveBotFromLobby(botId) {
+      if (!gameState || !gameState.isHost) return;
+      const updatedPlayers = gameState.players
+        .filter(p => p.id !== botId)
+        .map(({ secretNumber, ...rest }) => rest);
+
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        players: updatedPlayers,
+        updatedAt: Date.now()
+      });
+    }
+
+    async function hostStartOnlineMatch() {
+      if (!gameState || !gameState.isHost || gameState.players.length < 2) return;
+
+      const players = gameState.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        isBot: Boolean(p.isBot),
+        isHost: Boolean(p.isHost),
+        hand: { add: 1, multiply: 1, divide: 1, zero: 1 },
+        setsBought: 0
+      }));
+
+      const secretsMap = generateUniqueSecrets(players.map(p => p.id));
+      const nextMatchNum = (gameState.matchNumber || 0) + 1;
+
+      // 1. Store secret numbers in separate reveal-locked collection (NOT on the room document)
+      await setDoc(getSecretsDocRef(gameState.roomCode), {
+        roomCode: gameState.roomCode,
+        matchNumber: nextMatchNum,
+        numbers: secretsMap,
+        createdAt: Date.now()
+      });
+
+      // 2. Transition room document into active playing phase
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        phase: 'playing',
+        matchNumber: nextMatchNum,
+        players,
+        currentRound: 1,
+        maxRounds: 4 * players.length + 2,
+        clues: [],
+        pendingProposal: null,
+        endVotes: [],
+        ballots: {},
+        endReason: '',
+        updatedAt: Date.now()
+      });
+    }
+
+    // =========================================================================
+    // ONLINE REAL-TIME PAIR PROPOSALS, ACCEPT/DECLINE & END-GAME VOTING
+    // =========================================================================
+    async function sendOnlineProposal() {
+      const pA = gameState.players.find(p => p.id === gameState.selectedPartnerA);
+      const pB = gameState.players.find(p => p.id === gameState.selectedPartnerB);
+      const chosenOps = OPERATORS.filter(op => gameState.selectedCards.has(op.id)).map(op => op.id);
+
+      if (!pA || !pB || pA.id === pB.id || chosenOps.length === 0) return;
+
+      if (gameState.pendingProposal) {
+        showToast('There is already an active trade proposal on the table!', 'amber');
+        return;
+      }
+
+      const proposal = {
+        id: `prop_${Date.now()}`,
+        fromId: pA.id,
+        fromName: pA.name,
+        toId: pB.id,
+        toName: pB.name,
+        ops: chosenOps
+      };
+
+      gameState.selectedCards.clear();
+
+      // If target is an AI bot, evaluate & resolve immediately using the dealer's secret vault
+      if (pB.isBot) {
+        await resolveOnlineDeal(pA.id, pB.id, chosenOps, `${pB.name} (AI) accepted your proposal!`);
+        return;
+      }
+
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        pendingProposal: proposal,
+        updatedAt: Date.now()
+      });
+      showToast(`Sent proposal to ${pB.name}!`, 'sky');
+    }
+
+    async function respondToIncomingProposal(accept) {
+      if (!gameState || !gameState.pendingProposal) return;
+      const prop = gameState.pendingProposal;
+      if (prop.toId !== onlineSession.myUid) return;
+
+      if (!accept) {
+        await updateDoc(getRoomDocRef(gameState.roomCode), {
+          pendingProposal: null,
+          updatedAt: Date.now()
+        });
+        showToast(`Declined ${prop.fromName}'s proposal.`, 'slate');
+        return;
+      }
+
+      await resolveOnlineDeal(prop.fromId, prop.toId, prop.ops, `Deal accepted between ${prop.fromName} & ${prop.toName}!`);
+    }
+
+    async function cancelOutgoingProposal() {
+      if (!gameState || !gameState.pendingProposal) return;
+      if (gameState.pendingProposal.fromId !== onlineSession.myUid) return;
+
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        pendingProposal: null,
+        updatedAt: Date.now()
+      });
+    }
+
+    async function resolveOnlineDeal(playerAId, playerBId, opIds, toastMsg) {
+      const roomRef = getRoomDocRef(gameState.roomCode);
+      const secSnap = await getDoc(getSecretsDocRef(gameState.roomCode));
+      if (!secSnap.exists()) return;
+      const secrets = secSnap.data().numbers || {};
+
+      const updatedPlayers = gameState.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        isBot: Boolean(p.isBot),
+        isHost: Boolean(p.isHost),
+        hand: { ...p.hand },
+        setsBought: p.setsBought
+      }));
+
+      const pA = updatedPlayers.find(p => p.id === playerAId);
+      const pB = updatedPlayers.find(p => p.id === playerBId);
+      if (!pA || !pB) return;
+
+      const results = [];
+      for (const opId of opIds) {
+        if (pA.hand[opId] <= 0 || pB.hand[opId] <= 0) {
+          showToast('One of the players no longer has those cards.', 'rose');
+          await updateDoc(roomRef, { pendingProposal: null });
+          return;
+        }
+        pA.hand[opId] -= 1;
+        pB.hand[opId] -= 1;
+        const opMeta = OPERATORS.find(o => o.id === opId);
+        const val = computeOperatorResult(opId, secrets[pA.id], secrets[pB.id]);
+        results.push({ op: opId, label: opMeta.label, symbol: opMeta.symbol, value: val });
+      }
+
+      const roundStart = gameState.currentRound;
+      const roundEnd = gameState.currentRound + opIds.length - 1;
+      const nextRound = gameState.currentRound + opIds.length;
+
+      const newClue = {
+        id: `clue-${gameState.clues.length + 1}`,
+        roundStart,
+        roundEnd,
+        playerAId: pA.id,
+        playerBId: pB.id,
+        playerAName: pA.name,
+        playerBName: pB.name,
+        results
+      };
+
+      const nextClues = [newClue, ...gameState.clues];
+      const hitRoundLimit = nextRound > gameState.maxRounds;
+
+      await updateDoc(roomRef, {
+        players: updatedPlayers,
+        currentRound: nextRound,
+        clues: nextClues,
+        pendingProposal: null,
+        phase: hitRoundLimit ? 'ballot' : 'playing',
+        endReason: hitRoundLimit ? `Reached Round Limit (${gameState.maxRounds} rounds)` : '',
+        updatedAt: Date.now()
+      });
+
+      if (toastMsg) showToast(toastMsg, 'emerald');
+    }
+
+    async function toggleOnlineEndVote() {
+      if (!gameState || gameState.mode !== 'online') return;
+      const myUid = onlineSession.myUid;
+      const currentVotes = new Set(gameState.endVotes || []);
+
+      if (currentVotes.has(myUid)) {
+        currentVotes.delete(myUid);
+      } else {
+        currentVotes.add(myUid);
+      }
+
+      const humanIds = gameState.players.filter(p => !p.isBot).map(p => p.id);
+      const allHumansVoted = humanIds.length > 0 && humanIds.every(id => currentVotes.has(id));
+
+      await updateDoc(getRoomDocRef(gameState.roomCode), {
+        endVotes: Array.from(currentVotes),
+        phase: allHumansVoted ? 'ballot' : 'playing',
+        endReason: allHumansVoted
+          ? `Unanimous Vote to End (Round ${Math.min(gameState.currentRound, gameState.maxRounds)} of ${gameState.maxRounds})`
+          : '',
+        updatedAt: Date.now()
+      });
+    }
+
+    async function hostEnsureBotBallotsSubmitted(room) {
+      const bots = (room.players || []).filter(p => p.isBot);
+      const missingBots = bots.filter(b => !(room.ballots && room.ballots[b.id]));
+      if (missingBots.length === 0) return;
+
+      const updates = {};
+      missingBots.forEach(bot => {
+        updates[`ballots.${bot.id}`] = computeFairBotBallot(bot.id);
+      });
+      updates.updatedAt = Date.now();
+      await updateDoc(getRoomDocRef(room.roomCode), updates);
+    }
+
+    function renderOnlineBallotWaitingProgress(room) {
+      const list = document.getElementById('online-ballot-progress-list');
+      list.innerHTML = (room.players || []).map(p => {
+        const done = Boolean(room.ballots && room.ballots[p.id]);
+        return `
+          <div class="p-3 rounded-xl bg-slate-950/80 border ${done ? 'border-emerald-500/40' : 'border-slate-800'} flex items-center justify-between text-xs">
+            <span class="font-bold text-white truncate">${escapeHtml(p.name)}</span>
+            <span class="font-mono font-bold ${done ? 'text-emerald-400' : 'text-amber-400'}">
+              ${done ? '✓ Locked' : 'Deciding...'}
+            </span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // LOCAL MATCH INITIALIZATION (SOLO PVE & PASS-AND-PLAY PVP)
+    // =========================================================================
+    function startLocalMatch() {
+      const count = setupState.playerCount;
+      const ids = Array.from({ length: count }, (_, i) => `p${i}`);
+      const secretsMap = generateUniqueSecrets(ids);
+
+      const players = ids.map((id, i) => {
+        const rawName = (setupState.names[i] || '').trim();
+        const fallbackName = setupState.mode === 'pve' && i > 0 ? BOT_PROFILES[i - 1].name : `Player ${i + 1}`;
+        return {
+          id,
+          index: i,
+          name: rawName || fallbackName,
+          isBot: setupState.mode === 'pve' && i > 0,
+          secretNumber: secretsMap[id],
+          hand: { add: 1, multiply: 1, divide: 1, zero: 1 },
+          setsBought: 0
+        };
+      });
+
+      gameState = {
+        mode: setupState.mode,
+        players,
+        currentRound: 1,
+        maxRounds: 4 * count + 2,
+        clues: [],
+        selectedPartnerA: players[0].id,
+        selectedPartnerB: players[1].id,
+        selectedCards: new Set(),
+        botProposals: [],
+        endReason: '',
+        ballots: {},
+        pvpBallotIndex: 0
+      };
+
+      scratchpadState = {};
+      players.forEach(p => {
+        scratchpadState[p.id] = {};
+        for (let n = 1; n <= 100; n++) scratchpadState[p.id][n] = 0;
+      });
+      activeScratchpadPlayerId = players[0].id;
+
+      if (gameState.mode === 'pve') generateBotProposals();
+
+      switchView('view-game');
+      document.getElementById('header-round-badge').classList.remove('hidden');
+      document.getElementById('header-round-badge').classList.add('flex');
+      document.getElementById('btn-toggle-scratchpad').classList.remove('hidden');
+      document.getElementById('btn-toggle-scratchpad').classList.add('flex');
+      document.getElementById('btn-new-game-header').classList.remove('hidden');
+      document.getElementById('btn-new-game-header').classList.add('flex');
+
+      document.getElementById('latest-result-round').textContent = 'Waiting for Round 1';
+      document.getElementById('latest-result-content').className = 'py-6 text-center rounded-xl bg-slate-950/70 border border-dashed border-slate-800';
+      document.getElementById('latest-result-content').innerHTML = `<div class="text-slate-500 text-sm">Pair two players and play operator cards to reveal clues here.</div>`;
+
+      renderGameScreen();
+      renderScratchpad();
+      showToast(`Dealt ${count} unique secret numbers (1–100). Good luck!`, 'emerald');
+    }
+
+    function leaveCurrentMatch() {
+      cleanupOnlineListeners();
+      onlineSession.active = false;
+      onlineSession.roomCode = null;
+      gameState = null;
+      closeScratchpad();
+
+      document.getElementById('header-online-pill').classList.add('hidden');
+      document.getElementById('header-room-badge').classList.add('hidden');
+      document.getElementById('header-round-badge').classList.add('hidden');
+      document.getElementById('btn-toggle-scratchpad').classList.add('hidden');
+      document.getElementById('btn-new-game-header').classList.add('hidden');
+
+      switchView('view-setup');
+    }
+
+    function handlePlayAgainSameRoom() {
+      if (gameState && gameState.mode === 'online') {
+        if (gameState.isHost) {
+          hostStartOnlineMatch();
+        } else {
+          showToast('Only the room host can start the next match!', 'amber');
+        }
+      } else {
+        startLocalMatch();
+      }
+    }
+
+    function switchView(viewId) {
+      ['view-setup', 'view-online-lobby', 'view-game', 'view-guessing', 'view-results'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(viewId).classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // =========================================================================
+    // ACTIVE GAME SCREEN RENDERING & INTERACTIONS
+    // =========================================================================
+    function renderGameScreen() {
+      if (!gameState) return;
+
+      const isOnline = gameState.mode === 'online';
+      const roundsCompleted = gameState.currentRound - 1;
+      const displayRound = Math.min(gameState.currentRound, gameState.maxRounds);
+
+      document.getElementById('header-round-text').textContent = `${displayRound} / ${gameState.maxRounds}`;
+      document.getElementById('table-round-display').textContent = `Round ${displayRound}`;
+      document.getElementById('table-max-round-display').textContent = `of ${gameState.maxRounds} (${roundsCompleted} played)`;
+      document.getElementById('table-clues-count').textContent = gameState.clues.reduce((acc, c) => acc + c.results.length, 0);
+
+      // Stalemate warning
+      const hasAnyValidPair = checkAnyPlayablePairExists();
+      const stalematePill = document.getElementById('stalemate-warning-pill');
+      if (!hasAnyValidPair) {
+        stalematePill.classList.remove('hidden');
+        stalematePill.classList.add('flex');
+      } else {
+        stalematePill.classList.add('hidden');
+        stalematePill.classList.remove('flex');
+      }
+
+      // Online Proposal Banners & End-Game Vote UI
+      renderOnlineBannersAndVotes();
+
+      // Builder headings
+      document.getElementById('builder-title').textContent = isOnline ? 'Propose Pair & Cards' : 'Pair & Play Cards';
+      document.getElementById('builder-subtitle').textContent = isOnline
+        ? 'Select an opponent and shared cards to send a live trade offer to their device.'
+        : 'Both players spend 1 copy of each chosen card. Each card advances 1 round.';
+
+      renderPlayersArena();
+      renderPartnerSelectors();
+      renderCardSelectorGrid();
+      renderBotProposalsPanel();
+      renderClueFilterDropdown();
+      renderClueLog();
+    }
+
+    function renderOnlineBannersAndVotes() {
+      const incomingBanner = document.getElementById('incoming-proposal-banner');
+      const outgoingBanner = document.getElementById('outgoing-proposal-banner');
+      const votePill = document.getElementById('end-vote-status-pill');
+      const endBtnLabel = document.getElementById('btn-end-match-label');
+
+      if (gameState.mode !== 'online') {
+        incomingBanner.classList.add('hidden');
+        outgoingBanner.classList.add('hidden');
+        votePill.classList.add('hidden');
+        endBtnLabel.textContent = 'End & Submit Guesses';
+        return;
+      }
+
+      const prop = gameState.pendingProposal;
+      const myUid = onlineSession.myUid;
+
+      if (prop && prop.toId === myUid) {
+        incomingBanner.classList.remove('hidden');
+        outgoingBanner.classList.add('hidden');
+        document.getElementById('incoming-proposal-text').textContent =
+          `${prop.fromName} wants to pair up with you!`;
+        document.getElementById('incoming-proposal-cards').innerHTML = prop.ops.map(opId => {
+          const op = OPERATORS.find(o => o.id === opId);
+          return `<span class="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 font-mono text-xs font-bold text-amber-200">${op.symbol} ${op.label}</span>`;
+        }).join('');
+      } else if (prop && prop.fromId === myUid) {
+        incomingBanner.classList.add('hidden');
+        outgoingBanner.classList.remove('hidden');
+        const opNames = prop.ops.map(id => OPERATORS.find(o => o.id === id)?.label || id).join(' + ');
+        document.getElementById('outgoing-proposal-text').textContent =
+          `Waiting for ${prop.toName} to accept your offer (${opNames})...`;
+      } else {
+        incomingBanner.classList.add('hidden');
+        outgoingBanner.classList.add('hidden');
+      }
+
+      // Unanimous End-Game Vote status
+      const humanPlayers = gameState.players.filter(p => !p.isBot);
+      const votes = gameState.endVotes || [];
+      const iVoted = votes.includes(myUid);
+
+      votePill.classList.remove('hidden');
+      votePill.classList.add('flex');
+      document.getElementById('end-vote-count-text').textContent = `${votes.length} / ${humanPlayers.length}`;
+      endBtnLabel.textContent = iVoted ? '✓ Voted to End (Undo)' : 'Vote to End Match';
+    }
+
+    function handleEndMatchAction() {
+      if (gameState.mode === 'online') {
+        toggleOnlineEndVote();
+      } else {
+        openGuessPhase();
+      }
+    }
+
+    function checkAnyPlayablePairExists() {
+      const ps = gameState.players;
+      for (let i = 0; i < ps.length; i++) {
+        for (let j = i + 1; j < ps.length; j++) {
+          for (const op of OPERATORS) {
+            if (ps[i].hand[op.id] > 0 && ps[j].hand[op.id] > 0) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function renderPlayersArena() {
+      const grid = document.getElementById('players-arena-grid');
+      grid.innerHTML = '';
+      const isOnline = gameState.mode === 'online';
+
+      gameState.players.forEach(p => {
+        const isMe = isOnline && p.id === onlineSession.myUid;
+        const isSelectedA = gameState.selectedPartnerA === p.id;
+        const isSelectedB = gameState.selectedPartnerB === p.id;
+        const isSelected = isSelectedA || isSelectedB;
+
+        const borderClass = isSelected
+          ? 'border-emerald-500/80 bg-gradient-to-br from-emerald-950/35 to-felt-900 shadow-lg shadow-emerald-950/30'
+          : 'border-slate-800 bg-felt-900/90 hover:border-slate-700';
+
+        const roleBadge = isMe
+          ? `<span class="px-2 py-0.5 rounded-md bg-sky-500 text-slate-950 font-extrabold text-[10px] uppercase">You</span>`
+          : isSelectedA
+          ? `<span class="px-2 py-0.5 rounded-md bg-emerald-500 text-slate-950 font-extrabold text-[10px] uppercase">Partner A</span>`
+          : isSelectedB
+          ? `<span class="px-2 py-0.5 rounded-md bg-teal-400 text-slate-950 font-extrabold text-[10px] uppercase">Target</span>`
+          : p.isBot
+          ? `<span class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold text-[10px]">AI Bot</span>`
+          : `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 font-semibold text-[10px]">Player</span>`;
+
+        const cardPills = OPERATORS.map(op => {
+          const count = p.hand[op.id];
+          const colorMap = {
+            emerald: count > 0 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-slate-900/50 text-slate-600 border-slate-800',
+            amber: count > 0 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-slate-900/50 text-slate-600 border-slate-800',
+            sky: count > 0 ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-slate-900/50 text-slate-600 border-slate-800',
+            purple: count > 0 ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-slate-900/50 text-slate-600 border-slate-800'
+          };
+          return `
+            <div class="flex items-center justify-between px-2 py-1 rounded-lg border ${colorMap[op.color]} text-xs font-mono">
+              <span class="font-bold">${op.symbol}</span>
+              <span>×${count}</span>
+            </div>
+          `;
+        }).join('');
+
+        // In Online mode, you can buy a set for yourself (or host can buy for bots if desired; keeping self-buy clean)
+        const canBuyForSeat = !isOnline || isMe;
+
+        const card = document.createElement('div');
+        card.className = `rounded-2xl border p-4 transition cursor-pointer select-none ${borderClass}`;
+        card.onclick = (e) => {
+          if (e.target.closest('button')) return;
+          quickSelectSeat(p.id);
+        };
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-mono font-extrabold text-sm text-amber-400 shrink-0">
+                ???
+              </div>
+              <div class="min-w-0">
+                <div class="font-bold text-white text-sm truncate">${escapeHtml(p.name)}</div>
+                <div class="text-[11px] text-slate-400">
+                  Sets bought: <span class="font-mono font-bold ${p.setsBought > 0 ? 'text-rose-400' : 'text-slate-300'}">${p.setsBought}</span>
+                  ${p.setsBought > 0 ? `<span class="text-rose-400">(-${p.setsBought} pt)</span>` : ''}
+                </div>
+              </div>
+            </div>
+            ${roleBadge}
+          </div>
+
+          <div class="grid grid-cols-4 gap-1.5 mb-3">
+            ${cardPills}
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-slate-800/80">
+            <button type="button" onclick="openScratchpadFor('${p.id}')" class="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 transition">
+              Notes (${countRemainingCandidates(p.id)} left)
+            </button>
+            ${canBuyForSeat ? `
+              <button type="button" onclick="buyCardSet('${p.id}')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-bold transition">
+                + Buy Set (-1 pt)
+              </button>
+            ` : `<span class="text-[10px] text-slate-500">Tap to target</span>`}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function quickSelectSeat(playerId) {
+      if (gameState.mode === 'online') {
+        if (playerId === onlineSession.myUid) return;
+        gameState.selectedPartnerA = onlineSession.myUid;
+        gameState.selectedPartnerB = playerId;
+        gameState.selectedCards.clear();
+        renderGameScreen();
+        return;
+      }
+
+      if (gameState.selectedPartnerA === playerId || gameState.selectedPartnerB === playerId) return;
+      if (gameState.mode === 'pve' && playerId !== 'p0') {
+        gameState.selectedPartnerA = 'p0';
+        gameState.selectedPartnerB = playerId;
+      } else {
+        gameState.selectedPartnerB = playerId;
+      }
+      gameState.selectedCards.clear();
+      renderGameScreen();
+    }
+
+    function renderPartnerSelectors() {
+      const selA = document.getElementById('select-partner-a');
+      const selB = document.getElementById('select-partner-b');
+      const isOnline = gameState.mode === 'online';
+
+      if (isOnline) {
+        // In Online mode, Partner A is locked to YOU (the local device user)
+        const me = gameState.players.find(p => p.id === onlineSession.myUid);
+        selA.innerHTML = me ? `<option value="${me.id}" selected>${escapeHtml(me.name)} (You)</option>` : '';
+        selA.disabled = true;
+
+        const others = gameState.players.filter(p => p.id !== onlineSession.myUid);
+        selB.innerHTML = others.map(p =>
+          `<option value="${p.id}" ${p.id === gameState.selectedPartnerB ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+        ).join('');
+      } else {
+        selA.disabled = false;
+        selA.innerHTML = gameState.players.map(p =>
+          `<option value="${p.id}" ${p.id === gameState.selectedPartnerA ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+        ).join('');
+        selB.innerHTML = gameState.players.map(p =>
+          `<option value="${p.id}" ${p.id === gameState.selectedPartnerB ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+        ).join('');
+      }
+    }
+
+    function onPartnerSelectionChange() {
+      if (gameState.mode !== 'online') {
+        gameState.selectedPartnerA = document.getElementById('select-partner-a').value;
+      }
+      gameState.selectedPartnerB = document.getElementById('select-partner-b').value;
+      gameState.selectedCards.clear();
+      renderPlayersArena();
+      renderCardSelectorGrid();
+    }
+
+    function renderCardSelectorGrid() {
+      const grid = document.getElementById('card-selector-grid');
+      const pA = gameState.players.find(p => p.id === gameState.selectedPartnerA);
+      const pB = gameState.players.find(p => p.id === gameState.selectedPartnerB);
+      const samePlayer = !pA || !pB || pA.id === pB.id;
+
+      for (const opId of Array.from(gameState.selectedCards)) {
+        if (samePlayer || pA.hand[opId] <= 0 || pB.hand[opId] <= 0) {
+          gameState.selectedCards.delete(opId);
+        }
+      }
+
+      grid.innerHTML = OPERATORS.map(op => {
+        const countA = pA ? pA.hand[op.id] : 0;
+        const countB = pB ? pB.hand[op.id] : 0;
+        const canPlay = !samePlayer && countA > 0 && countB > 0;
+        const isChecked = gameState.selectedCards.has(op.id);
+
+        const activeStyles = {
+          emerald: 'border-emerald-400 bg-emerald-500/20 text-white shadow-lg shadow-emerald-950/50',
+          amber: 'border-amber-400 bg-amber-500/20 text-white shadow-lg shadow-amber-950/50',
+          sky: 'border-sky-400 bg-sky-500/20 text-white shadow-lg shadow-sky-950/50',
+          purple: 'border-purple-400 bg-purple-500/20 text-white shadow-lg shadow-purple-950/50'
+        };
+
+        const symbolColors = {
+          emerald: 'text-emerald-400',
+          amber: 'text-amber-400',
+          sky: 'text-sky-400',
+          purple: 'text-purple-400'
+        };
+
+        const btnClass = !canPlay
+          ? 'opacity-40 cursor-not-allowed border-slate-800 bg-slate-950/60 text-slate-500'
+          : isChecked
+          ? activeStyles[op.color]
+          : 'border-slate-700/90 bg-slate-950/80 hover:border-slate-500 text-slate-200';
+
+        return `
+          <button type="button" ${!canPlay ? 'disabled' : ''} onclick="toggleCardSelection('${op.id}')" class="game-card p-3 rounded-xl border-2 text-left flex flex-col justify-between ${btnClass}">
+            <div class="flex items-center justify-between w-full mb-1.5">
+              <span class="font-mono font-extrabold text-xl ${canPlay ? symbolColors[op.color] : 'text-slate-600'}">${op.symbol}</span>
+              <span class="w-5 h-5 rounded-md border flex items-center justify-center text-xs font-bold ${isChecked ? 'bg-white text-slate-950 border-white' : 'border-slate-600 text-transparent'}">✓</span>
+            </div>
+            <div>
+              <div class="font-bold text-xs sm:text-sm">${op.label}</div>
+              <div class="text-[10px] text-slate-400 leading-tight mt-0.5">${op.shortDesc}</div>
+              <div class="text-[10px] font-mono mt-1.5 ${canPlay ? 'text-slate-300' : 'text-rose-400/80'}">
+                ${samePlayer ? 'Pick opponent' : `Hands: ${countA} & ${countB}`}
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      updateExecuteButtonState();
+    }
+
+    function toggleCardSelection(opId) {
+      if (gameState.selectedCards.has(opId)) {
+        gameState.selectedCards.delete(opId);
+      } else {
+        gameState.selectedCards.add(opId);
+      }
+      renderCardSelectorGrid();
+    }
+
+    function selectAllSharedCards() {
+      const pA = gameState.players.find(p => p.id === gameState.selectedPartnerA);
+      const pB = gameState.players.find(p => p.id === gameState.selectedPartnerB);
+      if (!pA || !pB || pA.id === pB.id) {
+        showToast('Choose two different players first.', 'amber');
+        return;
+      }
+      OPERATORS.forEach(op => {
+        if (pA.hand[op.id] > 0 && pB.hand[op.id] > 0) {
+          gameState.selectedCards.add(op.id);
+        }
+      });
+      renderCardSelectorGrid();
+    }
+
+    function updateExecuteButtonState() {
+      const btn = document.getElementById('btn-execute-deal');
+      const costBadge = document.getElementById('pair-round-cost-badge');
+      const count = gameState.selectedCards.size;
+      const remainingRounds = gameState.maxRounds - (gameState.currentRound - 1);
+      const isOnline = gameState.mode === 'online';
+
+      costBadge.textContent = `+${count} Round${count === 1 ? '' : 's'}`;
+
+      const pA = gameState.players.find(p => p.id === gameState.selectedPartnerA);
+      const pB = gameState.players.find(p => p.id === gameState.selectedPartnerB);
+
+      if (!pA || !pB || pA.id === pB.id) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Select Two Different Players</span>';
+        return;
+      }
+
+      if (isOnline && gameState.pendingProposal) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Resolve Current Proposal First</span>';
+        return;
+      }
+
+      if (count === 0) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Select 1 or More Shared Cards</span>';
+        return;
+      }
+
+      if (count > remainingRounds) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>Exceeds Max Rounds (${remainingRounds} left)</span>`;
+        return;
+      }
+
+      btn.disabled = false;
+      const cardNames = OPERATORS.filter(o => gameState.selectedCards.has(o.id)).map(o => o.label).join(' + ');
+      btn.innerHTML = isOnline
+        ? `<span>Send Offer to ${escapeHtml(pB.name)} (${cardNames})</span>`
+        : `<span>Execute Deal: ${escapeHtml(pA.name)} & ${escapeHtml(pB.name)} (${cardNames})</span>`;
+    }
+
+    function handleDealBuilderSubmit() {
+      if (gameState.mode === 'online') {
+        sendOnlineProposal();
+      } else {
+        executeLocalPairedPlay();
+      }
+    }
+
+    // =========================================================================
+    // BUYING CARD SETS & EXECUTING LOCAL DEALS
+    // =========================================================================
+    async function buyCardSet(playerId) {
+      if (gameState.mode === 'online') {
+        if (playerId !== onlineSession.myUid) return;
+        const updatedPlayers = gameState.players.map(p => {
+          const clean = {
+            id: p.id,
+            name: p.name,
+            isBot: Boolean(p.isBot),
+            isHost: Boolean(p.isHost),
+            hand: { ...p.hand },
+            setsBought: p.setsBought
+          };
+          if (clean.id === playerId) {
+            clean.hand.add += 1;
+            clean.hand.multiply += 1;
+            clean.hand.divide += 1;
+            clean.hand.zero += 1;
+            clean.setsBought += 1;
+          }
+          return clean;
+        });
+
+        await updateDoc(getRoomDocRef(gameState.roomCode), {
+          players: updatedPlayers,
+          updatedAt: Date.now()
+        });
+        showToast('Bought a fresh set of 4 cards (-1 pt penalty at game end).', 'amber');
+        return;
+      }
+
+      const player = gameState.players.find(p => p.id === playerId);
+      if (!player) return;
+
+      player.hand.add += 1;
+      player.hand.multiply += 1;
+      player.hand.divide += 1;
+      player.hand.zero += 1;
+      player.setsBought += 1;
+
+      if (gameState.mode === 'pve') generateBotProposals();
+
+      renderGameScreen();
+      showToast(`${player.name} bought a new set of 4 cards (-1 pt penalty at game end).`, 'amber');
+    }
+
+    function executeLocalPairedPlay() {
+      const pA = gameState.players.find(p => p.id === gameState.selectedPartnerA);
+      const pB = gameState.players.find(p => p.id === gameState.selectedPartnerB);
+      const chosenOps = OPERATORS.filter(op => gameState.selectedCards.has(op.id));
+
+      if (!pA || !pB || pA.id === pB.id || chosenOps.length === 0) return;
+
+      const remainingRounds = gameState.maxRounds - (gameState.currentRound - 1);
+      if (chosenOps.length > remainingRounds) {
+        showToast(`Only ${remainingRounds} round(s) remaining before game limit!`, 'rose');
+        return;
+      }
+
+      const results = [];
+      chosenOps.forEach(op => {
+        pA.hand[op.id] -= 1;
+        pB.hand[op.id] -= 1;
+        const val = computeOperatorResult(op.id, pA.secretNumber, pB.secretNumber);
+        results.push({ op: op.id, label: op.label, symbol: op.symbol, value: val });
+      });
+
+      const roundStart = gameState.currentRound;
+      const roundEnd = gameState.currentRound + chosenOps.length - 1;
+      gameState.currentRound += chosenOps.length;
+
+      const clueEntry = {
+        id: `clue-${gameState.clues.length + 1}`,
+        roundStart,
+        roundEnd,
+        playerAId: pA.id,
+        playerBId: pB.id,
+        playerAName: pA.name,
+        playerBName: pB.name,
+        results
+      };
+      gameState.clues.unshift(clueEntry);
+      gameState.selectedCards.clear();
+
+      renderLatestResultSpotlight(clueEntry);
+
+      if (gameState.currentRound > gameState.maxRounds) {
+        gameState.endReason = `Reached Round Limit (${gameState.maxRounds} rounds)`;
+        showToast(`Round limit of ${gameState.maxRounds} reached! Proceeding to Final Guesses.`, 'amber');
+        setTimeout(() => openGuessPhase(), 950);
+        return;
+      }
+
+      if (gameState.mode === 'pve' && gameState.currentRound <= gameState.maxRounds - 2) {
+        maybeBotsBuyCardSet();
+        generateBotProposals();
+      }
+
+      renderGameScreen();
+    }
+
+    function renderLatestResultSpotlight(clue) {
+      const roundLabel = clue.roundStart === clue.roundEnd
+        ? `Round ${clue.roundStart}`
+        : `Rounds ${clue.roundStart}–${clue.roundEnd}`;
+      document.getElementById('latest-result-round').textContent = roundLabel;
+
+      const colorMap = {
+        add: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+        multiply: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+        divide: 'border-sky-500/40 bg-sky-500/10 text-sky-300',
+        zero: 'border-purple-500/40 bg-purple-500/10 text-purple-300'
+      };
+
+      const pillsHtml = clue.results.map(r => `
+        <div class="p-3.5 rounded-xl border ${colorMap[r.op]} flex flex-col items-center justify-center animate-flip-in">
+          <div class="text-xs font-bold uppercase tracking-wider opacity-85">${r.symbol} ${r.label}</div>
+          <div class="font-mono text-3xl font-extrabold text-white mt-1">${r.value}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('latest-result-content').className = 'space-y-3';
+      document.getElementById('latest-result-content').innerHTML = `
+        <div class="text-sm font-bold text-white flex items-center justify-center gap-2">
+          <span class="px-2.5 py-0.5 rounded-lg bg-slate-800 text-emerald-300">${escapeHtml(clue.playerAName)}</span>
+          <span class="text-slate-500">&amp;</span>
+          <span class="px-2.5 py-0.5 rounded-lg bg-slate-800 text-teal-300">${escapeHtml(clue.playerBName)}</span>
+        </div>
+        <div class="grid grid-cols-${Math.min(clue.results.length, 2)} gap-2.5">
+          ${pillsHtml}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // SOLO PVE BOT CHATTER & PROPOSALS
+    // =========================================================================
+    function generateBotProposals() {
+      if (!gameState || gameState.mode !== 'pve') return;
+      const human = gameState.players[0];
+      const bots = gameState.players.filter(p => p.isBot);
+      const remainingRounds = gameState.maxRounds - (gameState.currentRound - 1);
+      const proposals = [];
+
+      bots.forEach((bot, idx) => {
+        const shared = OPERATORS.filter(op => human.hand[op.id] > 0 && bot.hand[op.id] > 0);
+        if (shared.length === 0) {
+          proposals.push({
+            botId: bot.id,
+            botName: bot.name,
+            ops: [],
+            text: `We don't share any matching cards right now—one of us would need to buy a set.`
+          });
+          return;
+        }
+
+        const maxTake = Math.min(shared.length, remainingRounds, idx % 2 === 0 ? 2 : 1);
+        const chosen = shared.slice(0, Math.max(1, maxTake));
+        const opLabels = chosen.map(o => o.label).join(' & ');
+        const quotes = [
+          `Want to pair up on ${opLabels} to narrow down our numbers?`,
+          `I'm open to running ${opLabels} with you right now.`,
+          `Let's link our hands—how about playing ${opLabels} together?`,
+          `I'll spend ${opLabels} with you if you want a clean read.`
+        ];
+        proposals.push({
+          botId: bot.id,
+          botName: bot.name,
+          ops: chosen.map(o => o.id),
+          text: quotes[(gameState.currentRound + idx) % quotes.length]
+        });
+      });
+
+      gameState.botProposals = proposals;
+    }
+
+    function renderBotProposalsPanel() {
+      const panel = document.getElementById('bot-proposals-panel');
+      if (!gameState || gameState.mode !== 'pve') {
+        panel.classList.add('hidden');
+        return;
+      }
+      panel.classList.remove('hidden');
+
+      const list = document.getElementById('bot-proposals-list');
+      list.innerHTML = gameState.botProposals.map(prop => {
+        const hasOps = prop.ops.length > 0;
+        const opBadges = prop.ops.map(opId => OPERATORS.find(o => o.id === opId)?.label || opId).join(' + ');
+
+        return `
+          <div class="p-3 rounded-xl bg-slate-950/75 border border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="text-xs sm:text-sm">
+              <span class="font-bold text-indigo-300">${escapeHtml(prop.botName)}:</span>
+              <span class="text-slate-300 italic">"${escapeHtml(prop.text)}"</span>
+            </div>
+            ${hasOps ? `
+              <button type="button" onclick="acceptBotProposal('${prop.botId}', '${prop.ops.join(',')}')" class="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition">
+                Accept (${opBadges})
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function acceptBotProposal(botId, opsCsv) {
+      gameState.selectedPartnerA = 'p0';
+      gameState.selectedPartnerB = botId;
+      gameState.selectedCards = new Set(opsCsv.split(',').filter(Boolean));
+      executeLocalPairedPlay();
+    }
+
+    function simulateBotPairTurn() {
+      const bots = gameState.players.filter(p => p.isBot);
+      const remainingRounds = gameState.maxRounds - (gameState.currentRound - 1);
+      if (remainingRounds <= 0) return;
+
+      for (let i = 0; i < bots.length; i++) {
+        for (let j = i + 1; j < bots.length; j++) {
+          const shared = OPERATORS.filter(op => bots[i].hand[op.id] > 0 && bots[j].hand[op.id] > 0);
+          if (shared.length > 0) {
+            const take = shared.slice(0, Math.min(shared.length, remainingRounds, 2));
+            gameState.selectedPartnerA = bots[i].id;
+            gameState.selectedPartnerB = bots[j].id;
+            gameState.selectedCards = new Set(take.map(o => o.id));
+            executeLocalPairedPlay();
+            return;
+          }
+        }
+      }
+      showToast('No two bots currently share a playable card. Pair with a bot or buy a set!', 'amber');
+    }
+
+    function maybeBotsBuyCardSet() {
+      const bots = gameState.players.filter(p => p.isBot);
+      for (const bot of bots) {
+        const totalCards = bot.hand.add + bot.hand.multiply + bot.hand.divide + bot.hand.zero;
+        if (totalCards === 0 && bot.setsBought === 0 && Math.random() < 0.45) {
+          bot.hand = { add: 1, multiply: 1, divide: 1, zero: 1 };
+          bot.setsBought += 1;
+          showToast(`${bot.name} bought a fresh set of 4 cards (-1 pt penalty).`, 'indigo');
+          break;
+        }
+      }
+    }
+
+    // =========================================================================
+    // CLUE LOG RENDERING
+    // =========================================================================
+    function renderClueFilterDropdown() {
+      const select = document.getElementById('clue-filter-player');
+      const currentVal = select.value;
+      select.innerHTML = `<option value="all">All Players</option>` +
+        gameState.players.map(p => `<option value="${p.id}" ${p.id === currentVal ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
+    }
+
+    function renderClueLog() {
+      const container = document.getElementById('clue-log-list');
+      const filterId = document.getElementById('clue-filter-player').value;
+
+      const filtered = filterId === 'all'
+        ? gameState.clues
+        : gameState.clues.filter(c => c.playerAId === filterId || c.playerBId === filterId);
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">No clues matching this filter yet.</div>`;
+        return;
+      }
+
+      const badgeColors = {
+        add: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        multiply: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+        divide: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+        zero: 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+      };
+
+      container.innerHTML = filtered.map(c => {
+        const rText = c.roundStart === c.roundEnd ? `R${c.roundStart}` : `R${c.roundStart}–${c.roundEnd}`;
+        const pills = c.results.map(r => `
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-mono text-xs font-bold ${badgeColors[r.op]}">
+            <span>${r.label}:</span>
+            <span class="text-white">${r.value}</span>
+          </span>
+        `).join('');
+
+        return `
+          <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <div class="font-bold text-slate-200">
+                ${escapeHtml(c.playerAName)} <span class="text-slate-500 font-normal">&amp;</span> ${escapeHtml(c.playerBName)}
+              </div>
+              <span class="font-mono text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">${rText}</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${pills}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // PRIVATE 1-100 DEDUCTION SCRATCHPAD & SMART CONSTRAINT FILTER
+    // =========================================================================
+    function toggleScratchpad() {
+      const drawer = document.getElementById('scratchpad-drawer');
+      if (drawer.classList.contains('translate-x-full')) {
+        drawer.classList.remove('translate-x-full');
+        renderScratchpad();
+      } else {
+        drawer.classList.add('translate-x-full');
+      }
+    }
+
+    function closeScratchpad() {
+      document.getElementById('scratchpad-drawer').classList.add('translate-x-full');
+    }
+
+    function openScratchpadFor(playerId) {
+      activeScratchpadPlayerId = playerId;
+      document.getElementById('scratchpad-drawer').classList.remove('translate-x-full');
+      renderScratchpad();
+    }
+
+    function countRemainingCandidates(playerId) {
+      const map = scratchpadState[playerId];
+      if (!map) return 100;
+      let count = 0;
+      for (let n = 1; n <= 100; n++) {
+        if (map[n] !== 2) count++;
+      }
+      return count;
+    }
+
+    function renderScratchpad() {
+      if (!gameState) return;
+      if (!activeScratchpadPlayerId || !scratchpadState[activeScratchpadPlayerId]) {
+        activeScratchpadPlayerId = gameState.players[0].id;
+      }
+
+      const tabsEl = document.getElementById('scratchpad-tabs');
+      tabsEl.innerHTML = gameState.players.map(p => {
+        const active = p.id === activeScratchpadPlayerId;
+        const rem = countRemainingCandidates(p.id);
+        return `
+          <button type="button" onclick="activeScratchpadPlayerId='${p.id}'; renderScratchpad()" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${active ? 'bg-indigo-500 text-white shadow' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}">
+            <span>${escapeHtml(p.name)}</span>
+            <span class="font-mono text-[10px] px-1.5 py-0.2 rounded ${active ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-900 text-slate-400'}">${rem}</span>
+          </button>
+        `;
+      }).join('');
+
+      document.getElementById('scratchpad-remaining-count').textContent = countRemainingCandidates(activeScratchpadPlayerId);
+
+      const grid = document.getElementById('scratchpad-grid');
+      const map = scratchpadState[activeScratchpadPlayerId];
+      let html = '';
+      for (let n = 1; n <= 100; n++) {
+        const state = map[n];
+        let cls = 'bg-slate-900 border-slate-700/80 text-slate-200 hover:border-slate-500';
+        if (state === 1) {
+          cls = 'bg-amber-500/25 border-amber-400 text-amber-200 font-extrabold ring-1 ring-amber-400/50';
+        } else if (state === 2) {
+          cls = 'bg-slate-950/50 border-slate-900 text-slate-600 line-through opacity-45';
+        }
+        html += `
+          <button type="button" onclick="cycleScratchpadNum(${n})" class="h-8 rounded-lg border font-mono text-xs font-semibold transition ${cls}">
+            ${n}
+          </button>
+        `;
+      }
+      grid.innerHTML = html;
+    }
+
+    function cycleScratchpadNum(num) {
+      const map = scratchpadState[activeScratchpadPlayerId];
+      map[num] = (map[num] + 1) % 3;
+      renderScratchpad();
+      renderPlayersArena();
+    }
+
+    function resetCurrentScratchpad() {
+      const map = scratchpadState[activeScratchpadPlayerId];
+      for (let n = 1; n <= 100; n++) map[n] = 0;
+      renderScratchpad();
+      renderPlayersArena();
+    }
+
+    function autoEliminateCandidates() {
+      const targetId = activeScratchpadPlayerId;
+      const relevantClues = gameState.clues.filter(c => c.playerAId === targetId || c.playerBId === targetId);
+
+      if (relevantClues.length === 0) {
+        showToast('No clues involve this player yet!', 'amber');
+        return;
+      }
+
+      const map = scratchpadState[targetId];
+      let eliminatedNow = 0;
+
+      for (let candidate = 1; candidate <= 100; candidate++) {
+        if (map[candidate] === 2) continue;
+        let possible = true;
+
+        for (const clue of relevantClues) {
+          let foundPartner = false;
+          for (let partnerNum = 1; partnerNum <= 100; partnerNum++) {
+            if (partnerNum === candidate) continue;
+            let allMatch = true;
+            for (const res of clue.results) {
+              if (computeOperatorResult(res.op, candidate, partnerNum) !== res.value) {
+                allMatch = false;
+                break;
+              }
+            }
+            if (allMatch) {
+              foundPartner = true;
+              break;
+            }
+          }
+          if (!foundPartner) {
+            possible = false;
+            break;
+          }
+        }
+
+        if (!possible) {
+          map[candidate] = 2;
+          eliminatedNow++;
+        }
+      }
+
+      renderScratchpad();
+      renderPlayersArena();
+      showToast(
+        eliminatedNow > 0
+          ? `Eliminated ${eliminatedNow} impossible number(s)!`
+          : 'All remaining candidates still satisfy the current clues.',
+        'emerald'
+      );
+    }
+
+    // =========================================================================
+    // FINAL GUESSING PHASE (LOCAL & ONLINE SIMULTANEOUS BALLOTS)
+    // =========================================================================
+    function openGuessPhase() {
+      if (!gameState.endReason) {
+        gameState.endReason = `Players Called Final Guesses (Round ${Math.min(gameState.currentRound, gameState.maxRounds)} of ${gameState.maxRounds})`;
+      }
+      closeScratchpad();
+      gameState.ballots = {};
+      gameState.pvpBallotIndex = 0;
+
+      switchView('view-guessing');
+      document.getElementById('online-ballot-waiting-screen').classList.add('hidden');
+
+      if (gameState.mode === 'pve') {
+        gameState.players.filter(p => p.isBot).forEach(bot => {
+          gameState.ballots[bot.id] = computeFairBotBallot(bot.id);
+        });
+        document.getElementById('pvp-privacy-screen').classList.add('hidden');
+        document.getElementById('guess-ballot-card').classList.remove('hidden');
+        renderBallotFormForPlayer(gameState.players[0]);
+      } else {
+        showPvPPrivacyScreen();
+      }
+    }
+
+    function showPvPPrivacyScreen() {
+      const player = gameState.players[gameState.pvpBallotIndex];
+      document.getElementById('pvp-pass-title').textContent = `Pass Device to ${player.name}`;
+      document.getElementById('pvp-privacy-screen').classList.remove('hidden');
+      document.getElementById('guess-ballot-card').classList.add('hidden');
+    }
+
+    function revealCurrentPvPBallot() {
+      const player = gameState.players[gameState.pvpBallotIndex];
+      document.getElementById('pvp-privacy-screen').classList.add('hidden');
+      document.getElementById('guess-ballot-card').classList.remove('hidden');
+      renderBallotFormForPlayer(player);
+    }
+
+    function renderBallotFormForPlayer(player) {
+      document.getElementById('ballot-player-heading').textContent = `${player.name}'s Final Guesses`;
+      const container = document.getElementById('ballot-inputs-container');
+
+      let html = `
+        <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-emerald-300">Your Own Secret Number</div>
+            <div class="font-bold text-white text-base">${escapeHtml(player.name)} (You)</div>
+            <div class="text-xs text-slate-400">Exact = +3 pts • Wrong = -3 pts • Blank = 0 pts</div>
+          </div>
+          <input
+            type="number"
+            min="1"
+            max="100"
+            id="guess-input-own"
+            placeholder="Pass (Blank)"
+            class="w-full sm:w-40 px-4 py-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 font-mono font-bold text-lg text-center text-white focus:outline-none focus:border-emerald-400"
+          />
+        </div>
+      `;
+
+      const opponents = gameState.players.filter(p => p.id !== player.id);
+      opponents.forEach(opp => {
+        html += `
+          <div class="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold uppercase tracking-wider text-sky-400">Opponent Deduction</div>
+              <div class="font-bold text-white text-base">${escapeHtml(opp.name)}</div>
+              <div class="text-xs text-slate-400">Exact = +2 pts (them -2) • Wrong = -2 pts • Blank = 0 pts</div>
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              data-opp-id="${opp.id}"
+              placeholder="Pass (Blank)"
+              class="guess-input-opp w-full sm:w-40 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 font-mono font-bold text-lg text-center text-white focus:outline-none focus:border-sky-400"
+            />
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+
+      const submitBtn = document.getElementById('btn-submit-ballot');
+      if (gameState.mode === 'pvp' && gameState.pvpBallotIndex < gameState.players.length - 1) {
+        const nextPlayer = gameState.players[gameState.pvpBallotIndex + 1];
+        submitBtn.textContent = `Save Ballot & Pass to ${nextPlayer.name} →`;
+      } else if (gameState.mode === 'online') {
+        submitBtn.textContent = `Lock In My Secret Ballot`;
+      } else {
+        submitBtn.textContent = `Lock In Guesses & Reveal All Numbers!`;
+      }
+    }
+
+    function parseGuessInput(raw) {
+      if (raw === '' || raw === null || raw === undefined) return null;
+      const num = parseInt(raw, 10);
+      if (isNaN(num) || num < 1 || num > 100) return null;
+      return num;
+    }
+
+    async function submitCurrentBallot() {
+      const ownVal = parseGuessInput(document.getElementById('guess-input-own').value);
+      const opponentsMap = {};
+      document.querySelectorAll('.guess-input-opp').forEach(inp => {
+        opponentsMap[inp.dataset.oppId] = parseGuessInput(inp.value);
+      });
+
+      const ballotPayload = { own: ownVal, opponents: opponentsMap };
+
+      if (gameState.mode === 'online') {
+        onlineSession.hasSubmittedOnlineBallot = true;
+        document.getElementById('guess-ballot-card').classList.add('hidden');
+        document.getElementById('online-ballot-waiting-screen').classList.remove('hidden');
+
+        await updateDoc(getRoomDocRef(gameState.roomCode), {
+          [`ballots.${onlineSession.myUid}`]: ballotPayload,
+          updatedAt: Date.now()
+        });
+        return;
+      }
+
+      const currentPlayer = gameState.mode === 'pve'
+        ? gameState.players[0]
+        : gameState.players[gameState.pvpBallotIndex];
+
+      gameState.ballots[currentPlayer.id] = ballotPayload;
+
+      if (gameState.mode === 'pvp' && gameState.pvpBallotIndex < gameState.players.length - 1) {
+        gameState.pvpBallotIndex += 1;
+        showPvPPrivacyScreen();
+      } else {
+        finalizeAndShowResults();
+      }
+    }
+
+    // Fair Constraint-Solving AI Deduction Engine
+    function computeFairBotBallot(botId) {
+      const players = gameState.players;
+      const n = players.length;
+      const consistentAssignments = [];
+      const clues = gameState.clues;
+
+      function isConsistentPartial(assigned) {
+        const len = assigned.length;
+        for (const clue of clues) {
+          const idxA = players.findIndex(p => p.id === clue.playerAId);
+          const idxB = players.findIndex(p => p.id === clue.playerBId);
+          if (idxA < len && idxB < len) {
+            for (const res of clue.results) {
+              if (computeOperatorResult(res.op, assigned[idxA], assigned[idxB]) !== res.value) {
+                return false;
+              }
+            }
+          }
+        }
+        return true;
+      }
+
+      if (n <= 3) {
+        function backtrack(assigned) {
+          if (consistentAssignments.length >= 2500) return;
+          if (assigned.length === n) {
+            consistentAssignments.push([...assigned]);
+            return;
+          }
+          for (let val = 1; val <= 100; val++) {
+            if (assigned.includes(val)) continue;
+            assigned.push(val);
+            if (isConsistentPartial(assigned)) backtrack(assigned);
+            assigned.pop();
+          }
+        }
+        backtrack([]);
+      } else {
+        for (let trial = 0; trial < 4000 && consistentAssignments.length < 400; trial++) {
+          const candidate = [];
+          let valid = true;
+          for (let seat = 0; seat < n; seat++) {
+            const start = Math.floor(Math.random() * 100) + 1;
+            let foundVal = null;
+            for (let offset = 0; offset < 100; offset++) {
+              const val = ((start + offset - 1) % 100) + 1;
+              if (candidate.includes(val)) continue;
+              candidate.push(val);
+              if (isConsistentPartial(candidate)) {
+                foundVal = val;
+                break;
+              }
+              candidate.pop();
+            }
+            if (foundVal === null) { valid = false; break; }
+          }
+          if (valid && candidate.length === n) consistentAssignments.push(candidate);
+        }
+      }
+
+      const ballot = { own: null, opponents: {} };
+      players.forEach(p => {
+        if (p.id !== botId) ballot.opponents[p.id] = null;
+      });
+
+      if (consistentAssignments.length === 0) return ballot;
+
+      players.forEach((p, seatIdx) => {
+        const freq = {};
+        consistentAssignments.forEach(arr => {
+          const v = arr[seatIdx];
+          freq[v] = (freq[v] || 0) + 1;
+        });
+
+        let bestNum = null;
+        let bestCount = 0;
+        for (const [numStr, cnt] of Object.entries(freq)) {
+          if (cnt > bestCount) {
+            bestCount = cnt;
+            bestNum = parseInt(numStr, 10);
+          }
+        }
+
+        const confidence = bestCount / consistentAssignments.length;
+        if (p.id === botId) {
+          if (confidence >= 0.55) ballot.own = bestNum;
+        } else {
+          if (confidence >= 0.60) ballot.opponents[p.id] = bestNum;
+        }
+      });
+
+      return ballot;
+    }
+
+    // =========================================================================
+    // FINAL REVEAL & SCOREBOARD RENDERING
+    // =========================================================================
+    function finalizeAndShowResults() {
+      const players = gameState.players;
+      const stats = {};
+
+      players.forEach(p => {
+        stats[p.id] = {
+          player: p,
+          ownPts: 0,
+          oppGuessPts: 0,
+          snipedPenaltyPts: 0,
+          setPenaltyPts: -p.setsBought,
+          oppDetails: [],
+          total: 0
+        };
+      });
+
+      players.forEach(guesser => {
+        const ballot = gameState.ballots[guesser.id] || { own: null, opponents: {} };
+
+        if (ballot.own !== null && ballot.own !== undefined) {
+          if (ballot.own === guesser.secretNumber) {
+            stats[guesser.id].ownPts = 3;
+          } else {
+            stats[guesser.id].ownPts = -3;
+          }
+        }
+
+        Object.entries(ballot.opponents || {}).forEach(([targetId, guessedNum]) => {
+          if (guessedNum === null || guessedNum === undefined) return;
+          const target = players.find(p => p.id === targetId);
+          if (!target) return;
+
+          if (guessedNum === target.secretNumber) {
+            stats[guesser.id].oppGuessPts += 2;
+            stats[target.id].snipedPenaltyPts -= 2;
+            stats[guesser.id].oppDetails.push({
+              targetName: target.name,
+              guess: guessedNum,
+              correct: true
+            });
+          } else {
+            stats[guesser.id].oppGuessPts -= 2;
+            stats[guesser.id].oppDetails.push({
+              targetName: target.name,
+              guess: guessedNum,
+              correct: false
+            });
+          }
+        });
+      });
+
+      const ranked = Object.values(stats).map(s => {
+        s.total = s.ownPts + s.oppGuessPts + s.snipedPenaltyPts + s.setPenaltyPts;
+        return s;
+      }).sort((a, b) => b.total - a.total);
+
+      const topScore = ranked[0].total;
+      const winners = ranked.filter(r => r.total === topScore);
+
+      document.getElementById('winner-headline').textContent =
+        winners.length === 1
+          ? `${winners[0].player.name} Wins With ${topScore} Pts!`
+          : `Tie Game: ${winners.map(w => w.player.name).join(' & ')} (${topScore} Pts)!`;
+      document.getElementById('results-end-reason').textContent = gameState.endReason || 'Match Complete';
+
+      // Play Again button visibility for online guests vs host
+      const replayBtn = document.getElementById('btn-play-again-same');
+      if (gameState.mode === 'online' && !gameState.isHost) {
+        replayBtn.textContent = 'Waiting for Host to Start Next Match...';
+      } else {
+        replayBtn.textContent = 'Play Again in Same Room';
+      }
+
+      document.getElementById('revealed-numbers-grid').innerHTML = players.map(p => `
+        <div class="p-4 rounded-2xl bg-felt-900 border border-slate-800 text-center shadow">
+          <div class="text-xs font-bold text-slate-400 truncate mb-1">${escapeHtml(p.name)}</div>
+          <div class="font-mono text-3xl font-extrabold text-emerald-400">${p.secretNumber}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('scoreboard-tbody').innerHTML = ranked.map((row, idx) => {
+        const ballot = gameState.ballots[row.player.id] || { own: null };
+        const ownBadge = (ballot.own === null || ballot.own === undefined)
+          ? `<span class="text-slate-500">Pass (0)</span>`
+          : row.ownPts > 0
+          ? `<span class="font-mono font-bold text-emerald-400">${ballot.own} (+3)</span>`
+          : `<span class="font-mono font-bold text-rose-400">${ballot.own} (-3)</span>`;
+
+        const oppHtml = row.oppDetails.length === 0
+          ? `<span class="text-slate-500">None (0)</span>`
+          : row.oppDetails.map(d =>
+              `<div class="text-xs font-mono ${d.correct ? 'text-emerald-400' : 'text-rose-400'}">
+                ${escapeHtml(d.targetName)}: ${d.guess} (${d.correct ? '+2' : '-2'})
+              </div>`
+            ).join('');
+
+        const penaltyParts = [];
+        if (row.setPenaltyPts < 0) penaltyParts.push(`Sets: ${row.setPenaltyPts}`);
+        if (row.snipedPenaltyPts < 0) penaltyParts.push(`Guessed: ${row.snipedPenaltyPts}`);
+        const penaltyText = penaltyParts.length > 0 ? penaltyParts.join(', ') : '0';
+
+        const isWinner = row.total === topScore;
+
+        return `
+          <tr class="${isWinner ? 'bg-emerald-500/10' : ''}">
+            <td class="py-3.5 px-4 font-mono font-bold ${isWinner ? 'text-amber-400' : 'text-slate-400'}">#${idx + 1}</td>
+            <td class="py-3.5 px-4 font-bold text-white">
+              ${escapeHtml(row.player.name)}
+              ${isWinner ? '<span class="ml-1.5 text-xs text-amber-400">★</span>' : ''}
+            </td>
+            <td class="py-3.5 px-4 text-center font-mono font-extrabold text-emerald-300 text-base">${row.player.secretNumber}</td>
+            <td class="py-3.5 px-4">${ownBadge}</td>
+            <td class="py-3.5 px-4">${oppHtml}</td>
+            <td class="py-3.5 px-4 text-center font-mono text-xs ${penaltyText !== '0' ? 'text-rose-400 font-bold' : 'text-slate-500'}">${penaltyText}</td>
+            <td class="py-3.5 px-4 text-right font-mono font-extrabold text-lg ${row.total >= 0 ? 'text-white' : 'text-rose-400'}">
+              ${row.total > 0 ? `+${row.total}` : row.total}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      const auditContainer = document.getElementById('audit-clues-list');
+      if (gameState.clues.length === 0) {
+        auditContainer.innerHTML = `<div class="text-xs text-slate-500">No cards were played during this match.</div>`;
+      } else {
+        auditContainer.innerHTML = [...gameState.clues].reverse().map(c => {
+          const pA = players.find(p => p.id === c.playerAId);
+          const pB = players.find(p => p.id === c.playerBId);
+          const rLabel = c.roundStart === c.roundEnd ? `Round ${c.roundStart}` : `Rounds ${c.roundStart}–${c.roundEnd}`;
+          const checks = c.results.map(r => {
+            return `<span class="font-mono text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-300">${r.label}: ${r.value} ✓</span>`;
+          }).join(' ');
+
+          return `
+            <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-white">${escapeHtml(pA.name)} (${pA.secretNumber}) &amp; ${escapeHtml(pB.name)} (${pB.secretNumber})</span>
+                <span class="font-mono text-slate-500">${rLabel}</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5">${checks}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      switchView('view-results');
+    }
+
+    // =========================================================================
+    // MODALS, TOASTS & UTILITIES
+    // =========================================================================
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function showToast(message, tone = 'emerald') {
+      const container = document.getElementById('toast-container');
+      const colors = {
+        emerald: 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200',
+        amber: 'bg-amber-950/95 border-amber-500/50 text-amber-200',
+        rose: 'bg-rose-950/95 border-rose-500/50 text-rose-200',
+        indigo: 'bg-indigo-950/95 border-indigo-500/50 text-indigo-200',
+        sky: 'bg-sky-950/95 border-sky-500/50 text-sky-200',
+        slate: 'bg-slate-900/95 border-slate-600/50 text-slate-200'
+      };
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-xl text-xs sm:text-sm font-medium backdrop-blur-md animate-pop ${colors[tone] || colors.emerald}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.25s ease';
+        setTimeout(() => toast.remove(), 260);
+      }, 3200);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Expose handlers to inline HTML event attributes
+    Object.assign(window, {
+      setSetupMode,
+      setPlayerCount,
+      createOnlineRoom,
+      joinOnlineRoom,
+      copyRoomInvite,
+      hostAddBotToLobby,
+      hostRemoveBotFromLobby,
+      hostStartOnlineMatch,
+      startLocalMatch,
+      leaveCurrentMatch,
+      handlePlayAgainSameRoom,
+      handleEndMatchAction,
+      quickSelectSeat,
+      onPartnerSelectionChange,
+      toggleCardSelection,
+      selectAllSharedCards,
+      handleDealBuilderSubmit,
+      respondToIncomingProposal,
+      cancelOutgoingProposal,
+      buyCardSet,
+      acceptBotProposal,
+      simulateBotPairTurn,
+      renderClueLog,
+      toggleScratchpad,
+      openScratchpadFor,
+      cycleScratchpadNum,
+      resetCurrentScratchpad,
+      autoEliminateCandidates,
+      revealCurrentPvPBallot,
+      submitCurrentBallot,
+      openModal,
+      closeModal
+    });
+
+    // Boot application
+    window.addEventListener('DOMContentLoaded', () => {
+      initSetupLobby();
+      initCloudBackend();
+    });
+  </script>
+</body>
+</html>
